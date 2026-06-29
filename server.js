@@ -1,20 +1,27 @@
 // Entry point for deployment platforms that require an explicit server.js.
-// Must be run AFTER `npm run build` — this starts the pre-built Next.js app.
+// If the platform runs `npm run build` before starting, server.js boots
+// the pre-built app immediately. If no build step is configured, server.js
+// detects the missing .next directory and runs the build automatically.
 
 const { createServer } = require('http')
 const { parse } = require('url')
+const { execSync } = require('child_process')
 const next = require('next')
 const path = require('path')
 const fs = require('fs')
 
 const port = parseInt(process.env.PORT ?? '3000', 10)
 
-// Bail early with a clear message if the app hasn't been built yet.
+// Build on demand if the platform didn't run `next build` as a separate step.
 const buildDir = path.join(__dirname, '.next')
 if (!fs.existsSync(buildDir)) {
-  console.error('[autol10n] ERROR: .next build directory not found.')
-  console.error('[autol10n] Run `npm run build` before starting the server.')
-  process.exit(1)
+  console.log('[autol10n] .next not found — running build now (first deploy only)...')
+  try {
+    execSync('npm run build', { stdio: 'inherit', cwd: __dirname })
+  } catch (err) {
+    console.error('[autol10n] Build failed:', err.message)
+    process.exit(1)
+  }
 }
 
 const app = next({ dev: false, port })
