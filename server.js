@@ -12,8 +12,14 @@ const fs = require('fs')
 
 const port = parseInt(process.env.PORT ?? '3000', 10)
 
+// Mirror the distDir logic from next.config.ts — both must agree on where
+// the build output lives. In Kubernetes the nonroot user cannot write to /app,
+// so we use /tmp/.next which is writable by any user.
+const buildDir = process.env.KUBERNETES_SERVICE_HOST
+  ? '/tmp/.next'
+  : path.join(__dirname, '.next')
+
 // Build on demand if the platform didn't run `next build` as a separate step.
-const buildDir = path.join(__dirname, '.next')
 if (!fs.existsSync(buildDir)) {
   console.log('[autol10n] .next not found — running build now (first deploy only)...')
   try {
