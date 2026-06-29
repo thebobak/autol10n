@@ -73,6 +73,11 @@ async function translateUnit(
 }
 
 export default function Home() {
+  // `mounted` gates any UI that reads from localStorage. Next.js renders the
+  // page on the server (where localStorage doesn't exist) and then hydrates
+  // on the client. If server and client render different HTML, React throws a
+  // hydration error. Keeping localStorage-dependent UI hidden until after the
+  // first client-side effect resolves the mismatch.
   const [mounted, setMounted] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [showTour, setShowTour] = useState(false)
@@ -84,6 +89,9 @@ export default function Home() {
     apiKey: '',
     model: DEFAULT_MODEL,
   })
+  // `configDraft` is the working copy inside the Settings modal. It is only
+  // promoted to `config` when the user clicks Save, so cancelling discards
+  // changes without affecting the running translation or other UI state.
   const [configDraft, setConfigDraft] = useState<LlmConfig>(config)
 
   const [targetLanguage, setTargetLanguage] = useState('')
@@ -102,6 +110,10 @@ export default function Home() {
   const [showErrorLog, setShowErrorLog] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // `abortRef` is a ref (not state) so the translation loop can read the
+  // current value synchronously on every iteration. A state update is
+  // asynchronous and batched — the loop would process at least one extra
+  // segment before a state change propagated.
   const abortRef = useRef(false)
 
   // Load config from localStorage after mount to avoid hydration mismatch

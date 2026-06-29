@@ -1,3 +1,16 @@
+/**
+ * Server-side proxy for LLM translation requests.
+ *
+ * Why a server-side proxy instead of calling the LLM directly from the browser?
+ *   Browsers enforce the Same-Origin Policy: a fetch() from localhost:3000 to
+ *   api.openai.com (a different origin) is blocked unless the LLM server sends
+ *   permissive CORS headers. Most LLM providers do, but corporate/private
+ *   endpoints often don't. Running the call here on the server sidesteps CORS
+ *   entirely and also keeps the API key out of browser network logs.
+ *
+ * Request shape:  { sourceXml, targetLanguage, apiUrl, apiKey, model }
+ * Response shape: { translation: string }  |  { error: string }
+ */
 import { NextRequest, NextResponse } from 'next/server'
 
 // Allow up to 60 s for a single segment translation before the platform
@@ -5,8 +18,14 @@ import { NextRequest, NextResponse } from 'next/server'
 // slow models and large segments with heavy XML markup.
 export const maxDuration = 60
 
-// Accept either a full endpoint URL or a bare base URL and resolve to the
-// standard OpenAI-compatible chat completions path.
+/**
+ * Normalise whatever the user typed into the Settings "API Endpoint" field
+ * into a fully-qualified chat completions URL.
+ *
+ * Users commonly paste a base URL (https://api.openai.com) rather than the
+ * full path. This function appends the standard path components so either
+ * form works without the user needing to know the exact endpoint path.
+ */
 function resolveEndpoint(raw?: string): string {
   const base = 'https://llm.atko.ai/v1/chat/completions'
   if (!raw?.trim()) return base
@@ -48,6 +67,8 @@ export async function POST(req: NextRequest) {
         content: sourceXml,
       },
     ],
+    // Low temperature keeps translations deterministic and avoids the model
+    // creatively paraphrasing content instead of translating it faithfully.
     temperature: 0.3,
   }
 
