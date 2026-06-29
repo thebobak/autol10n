@@ -14,7 +14,12 @@
 /coverage
 
 # next.js
-/.next/
+# .next/ is intentionally tracked (pre-built for container deployment).
+# Dev artifacts and caches are excluded — they are environment-specific
+# and auto-regenerated.
+/.next/cache
+/.next/dev/
+/.next/trace*
 /out/
 
 # production

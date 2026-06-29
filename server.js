@@ -1,33 +1,20 @@
 // Entry point for deployment platforms that require an explicit server.js.
-// If the platform runs `npm run build` before starting, server.js boots
-// the pre-built app immediately. If no build step is configured, server.js
-// detects the missing .next directory and runs the build automatically.
+// The .next build directory is committed to the repository and COPY'd into
+// the container image — no build step runs at container startup.
 
 const { createServer } = require('http')
 const { parse } = require('url')
-const { execSync } = require('child_process')
 const next = require('next')
 const path = require('path')
 const fs = require('fs')
 
 const port = parseInt(process.env.PORT ?? '3000', 10)
 
-// Mirror the distDir logic from next.config.ts — both must agree on where
-// the build output lives. In Kubernetes the nonroot user cannot write to /app,
-// so we use /tmp/.next which is writable by any user.
-const buildDir = process.env.KUBERNETES_SERVICE_HOST
-  ? '/tmp/.next'
-  : path.join(__dirname, '.next')
-
-// Build on demand if the platform didn't run `next build` as a separate step.
+const buildDir = path.join(__dirname, '.next')
 if (!fs.existsSync(buildDir)) {
-  console.log('[autol10n] .next not found — running build now (first deploy only)...')
-  try {
-    execSync('npm run build', { stdio: 'inherit', cwd: __dirname })
-  } catch (err) {
-    console.error('[autol10n] Build failed:', err.message)
-    process.exit(1)
-  }
+  console.error('[autol10n] .next directory not found.')
+  console.error('[autol10n] Run `npm run build` locally and ensure .next/ is committed before deploying.')
+  process.exit(1)
 }
 
 const app = next({ dev: false, port })
