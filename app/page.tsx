@@ -6,6 +6,7 @@ import type { LlmConfig, TranslationError, TranslationStatus } from '@/lib/types
 import OnboardingModal from '@/components/OnboardingModal'
 import TourModal from '@/components/TourModal'
 import InfoModal from '@/components/InfoModal'
+import ReviewDrawer from '@/components/ReviewDrawer'
 
 const ONBOARDING_KEY = 'autol10n_onboarded'
 
@@ -91,6 +92,8 @@ export default function Home() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [showTour, setShowTour] = useState(false)
   const [showInfo, setShowInfo] = useState(false)
+  const [showReview, setShowReview] = useState(false)
+  const [hasReviewEdits, setHasReviewEdits] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showApiKey, setShowApiKey] = useState(false)
   const [config, setConfig] = useState<LlmConfig>({
@@ -131,6 +134,9 @@ export default function Home() {
   const docRef = useRef<Document | null>(null)
   const allUnitsRef = useRef<import('@/lib/xliff').TransUnit[]>([])
   const doneCountRef = useRef(0)
+  // Snapshot of the serialized XML taken immediately after translation
+  // completes — before any manual edits. Used for "Download Original" option.
+  const originalXmlRef = useRef<string | null>(null)
 
   // Load config from localStorage after mount to avoid hydration mismatch
   useEffect(() => {
@@ -228,6 +234,7 @@ export default function Home() {
   const runTranslation = async (isResume: boolean) => {
     abortRef.current = false
     setCancelling(false)
+    if (!isResume) setHasReviewEdits(false)
 
     let doc: Document
     let units: import('@/lib/xliff').TransUnit[]
@@ -300,6 +307,7 @@ export default function Home() {
       setStatus('paused')
     } else {
       const xml = serializeXliff(doc)
+      originalXmlRef.current = xml  // snapshot before any manual edits
       const blob = new Blob([xml], { type: 'application/xml' })
       const url = URL.createObjectURL(blob)
       setOutputBlob(url)
@@ -315,12 +323,27 @@ export default function Home() {
   const resumeTranslation = () => runTranslation(true)
 
   const downloadFile = () => {
-    if (!outputBlob) return
+    if (!docRef.current) return
+    // Re-serialize from the live DOM so any drawer edits are included.
+    const xml = serializeXliff(docRef.current)
+    const blob = new Blob([xml], { type: 'application/xml' })
+    const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = outputBlob
-    const outName = fileName.replace(/\.xlf(f?)$/i, '_translated.$1') || 'translated.xlf'
-    a.download = outName
+    a.href = url
+    a.download = fileName.replace(/\.xlf(f?)$/i, '_translated.$1') || 'translated.xlf'
     a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const downloadOriginal = () => {
+    if (!originalXmlRef.current) return
+    const blob = new Blob([originalXmlRef.current], { type: 'application/xml' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName.replace(/\.xlf(f?)$/i, '_ai_translation.$1') || 'ai_translation.xlf'
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   const downloadPartial = () => {
@@ -340,6 +363,9 @@ export default function Home() {
     docRef.current = null
     allUnitsRef.current = []
     doneCountRef.current = 0
+    originalXmlRef.current = null
+    setShowReview(false)
+    setHasReviewEdits(false)
     setStatus('idle')
     setXliffContent('')
     setFileName('')
@@ -811,6 +837,16 @@ export default function Home() {
                   </svg>
                   Download Partial ({progress} of {total} segments)
                 </button>
+                <button
+                  onClick={() => setShowReview(true)}
+                  className="retro-btn btn-ghost w-full"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  Review & Edit Translated Segments
+                </button>
                 <button onClick={reset} className="retro-btn btn-ghost w-full">
                   Start Over
                 </button>
@@ -873,6 +909,26 @@ export default function Home() {
                   </svg>
                   Download Translated XLIFF
                 </button>
+                {hasReviewEdits && <button
+                  onClick={downloadOriginal}
+                  className="retro-btn w-full"
+                  style={{ borderStyle: 'dashed', background: 'rgba(43,45,66,0.03)', fontSize: '0.82rem' }}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download Original AI Translation
+                </button>}
+                <button
+                  onClick={() => setShowReview(true)}
+                  className="retro-btn btn-ghost w-full"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  Review & Edit Translation
+                </button>
                 <button onClick={reset} className="retro-btn btn-ghost w-full">
                   Start Over
                 </button>
@@ -927,6 +983,15 @@ export default function Home() {
 
       {showTour && <TourModal onClose={() => setShowTour(false)} />}
       {showInfo && <InfoModal onClose={() => setShowInfo(false)} />}
+
+      {showReview && allUnitsRef.current.length > 0 && (
+        <ReviewDrawer
+          units={allUnitsRef.current}
+          errorUnitIds={new Set(errors?.map((e) => e.unitId) ?? [])}
+          onClose={() => setShowReview(false)}
+          onEditSaved={() => setHasReviewEdits(true)}
+        />
+      )}
 
     </div>
   )
