@@ -1,9 +1,10 @@
 import type { NextConfig } from "next";
 
-const buildDate = new Date()
-  .toISOString()          // "2026-06-29T14:23:00.000Z"
-  .slice(0, 10)           // "2026-06-29"
-  .replace(/-/g, '.')     // "2026.06.29"
+const d = new Date()
+const pad = (n: number) => String(n).padStart(2, '0')
+// Local time so the build stamp matches the developer's clock, not UTC.
+const buildDate = `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())}.${pad(d.getHours())}`
+// e.g. "2026.06.29.14"
 
 const nextConfig: NextConfig = {
   env: {
