@@ -2,6 +2,8 @@ export interface LlmConfig {
   apiUrl: string
   apiKey: string
   model: string
+  promptMode: 'standard' | 'append' | 'replace'
+  customPrompt: string
 }
 
 export interface TranslationError {

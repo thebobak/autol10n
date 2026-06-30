@@ -3,23 +3,32 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { parseXliff, setTranslation, serializeXliff, type TransUnit } from '@/lib/xliff'
 import type { LlmConfig, TranslationError, TranslationStatus } from '@/lib/types'
+import { DEFAULT_SYSTEM_PROMPT } from '@/lib/prompt'
 import OnboardingModal from '@/components/OnboardingModal'
 import TourModal from '@/components/TourModal'
 import InfoModal from '@/components/InfoModal'
 import ReviewDrawer, { type DrawerState } from '@/components/ReviewDrawer'
 
 const ONBOARDING_KEY = 'autol10n_onboarded'
+const SESSION_KEY   = 'autol10n_session'
 
 const STORAGE_KEY = 'autol10n_config'
 const DEFAULT_API_URL = 'https://llm.atko.ai/v1/chat/completions'
-const DEFAULT_MODEL = 'gpt-4o'
+const DEFAULT_MODEL = 'gemini-3.1-pro-preview'
 
 const MODEL_GROUPS = [
-  { group: 'OpenAI', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'] },
-  { group: 'Anthropic', models: ['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'] },
-  { group: 'Google', models: ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'] },
-  { group: 'Meta / Llama', models: ['llama-3.3-70b-instruct', 'llama-3.1-8b-instruct'] },
-  { group: 'Mistral', models: ['mistral-large-latest', 'mistral-small-latest'] },
+  {
+    group: 'Google',
+    models: ['gemini-3.1-pro-preview', 'gemini-3.5-flash', 'gemini-3.1-flash-lite'],
+  },
+  {
+    group: 'Anthropic',
+    models: ['claude-sonnet-5', 'claude-sonnet-4-6', 'claude-sonnet-4-5', 'claude-haiku-4-5'],
+  },
+  {
+    group: 'OpenAI',
+    models: ['gpt-5', 'gpt-4o', 'gpt-4o-mini'],
+  },
 ]
 const KNOWN_MODELS = MODEL_GROUPS.flatMap((g) => g.models)
 
@@ -30,6 +39,31 @@ const LANGUAGE_OPTIONS = [
   'Chinese Traditional (zh-TW)', 'Arabic (ar)', 'Dutch (nl-NL)',
   'Polish (pl-PL)', 'Russian (ru-RU)', 'Swedish (sv-SE)', 'Turkish (tr-TR)',
 ]
+
+// ─── Session persistence ──────────────────────────────────────────────────────
+
+interface SessionData {
+  translatedXml: string        // serialized docRef — may include manual edits
+  originalXml: string | null   // pre-edit snapshot for "Download Original"
+  xliffContent: string         // original source file (for file size display)
+  fileName: string
+  detectedSourceLanguage: string | null
+  targetLanguage: string
+  customLanguage: string
+  status: 'done' | 'paused'
+  progress: number
+  errors: TranslationError[]
+}
+
+function writeSession(data: SessionData) {
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(data)) } catch {}
+}
+
+function clearSession() {
+  try { localStorage.removeItem(SESSION_KEY) } catch {}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function formatTimeRemaining(ms: number): string {
   const sec = Math.round(ms / 1000)
@@ -57,6 +91,8 @@ async function translateUnit(
           apiUrl: config.apiUrl,
           apiKey: config.apiKey,
           model: config.model,
+          promptMode: config.promptMode,
+          customPrompt: config.customPrompt,
         }),
       })
 
@@ -90,16 +126,21 @@ export default function Home() {
   // first client-side effect resolves the mismatch.
   const [mounted, setMounted] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [sessionRestored, setSessionRestored] = useState(false)
   const [showTour, setShowTour] = useState(false)
   const [showInfo, setShowInfo] = useState(false)
   const [showReview, setShowReview] = useState(false)
   const [hasReviewEdits, setHasReviewEdits] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [showApiKey, setShowApiKey] = useState(false)
+  const [checkingAccess, setCheckingAccess] = useState(false)
+  const [accessResult, setAccessResult] = useState<{ ok: boolean; message: string } | null>(null)
   const [config, setConfig] = useState<LlmConfig>({
     apiUrl: DEFAULT_API_URL,
     apiKey: '',
     model: DEFAULT_MODEL,
+    promptMode: 'standard',
+    customPrompt: '',
   })
   // `configDraft` is the working copy inside the Settings modal. It is only
   // promoted to `config` when the user clicks Save, so cancelling discards
@@ -139,19 +180,46 @@ export default function Home() {
   const originalXmlRef = useRef<string | null>(null)
   const drawerStateRef = useRef<DrawerState | null>(null)
 
-  // Load config from localStorage after mount to avoid hydration mismatch
+  // Load config and restore any saved session after mount.
   useEffect(() => {
     setMounted(true)
     try {
+      // ── Config ───────────────────────────────────────────────
       const stored = localStorage.getItem(STORAGE_KEY)
       const hasOnboarded = !!localStorage.getItem(ONBOARDING_KEY)
       if (stored) {
-        const parsed = JSON.parse(stored) as LlmConfig
+        const parsed: LlmConfig = { promptMode: 'standard', customPrompt: '', ...JSON.parse(stored) }
         setConfig(parsed)
         setConfigDraft(parsed)
         if (!hasOnboarded && !parsed.apiKey) setShowOnboarding(true)
       } else {
         if (!hasOnboarded) setShowOnboarding(true)
+      }
+
+      // ── Session ──────────────────────────────────────────────
+      const sessionRaw = localStorage.getItem(SESSION_KEY)
+      if (sessionRaw) {
+        const s: SessionData = JSON.parse(sessionRaw)
+        // Re-parse the saved translated XML to rebuild the live DOM + unit refs
+        const { doc, units } = parseXliff(s.translatedXml)
+        docRef.current = doc
+        allUnitsRef.current = units
+        doneCountRef.current = s.progress
+        originalXmlRef.current = s.originalXml
+        setFileName(s.fileName)
+        setXliffContent(s.xliffContent ?? s.translatedXml)
+        setDetectedSourceLanguage(s.detectedSourceLanguage)
+        setTargetLanguage(s.targetLanguage)
+        setCustomLanguage(s.customLanguage ?? '')
+        setStatus(s.status)
+        setProgress(s.progress)
+        setTotal(units.length)
+        setErrors(s.errors ?? [])
+        if (s.status === 'done') {
+          const blob = new Blob([s.translatedXml], { type: 'application/xml' })
+          setOutputBlob(URL.createObjectURL(blob))
+        }
+        setSessionRestored(true)
       }
     } catch {}
   }, [])
@@ -165,7 +233,38 @@ export default function Home() {
   const openSettings = () => {
     setConfigDraft(config)
     setShowApiKey(false)
+    setAccessResult(null)
     setShowSettings(true)
+  }
+
+  const checkAccess = async () => {
+    setCheckingAccess(true)
+    setAccessResult(null)
+    try {
+      const res = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceXml: 'Hello',
+          targetLanguage: 'Spanish',
+          apiUrl: configDraft.apiUrl,
+          apiKey: configDraft.apiKey,
+          model: configDraft.model,
+          promptMode: 'standard',
+          customPrompt: '',
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setAccessResult({ ok: true, message: `Connected — ${configDraft.model} responded successfully.` })
+      } else {
+        setAccessResult({ ok: false, message: data.error ?? `Error ${res.status}` })
+      }
+    } catch (err) {
+      setAccessResult({ ok: false, message: err instanceof Error ? err.message : 'Network error' })
+    } finally {
+      setCheckingAccess(false)
+    }
   }
 
   const handleOnboardingConfig = (newConfig: LlmConfig) => {
@@ -235,7 +334,7 @@ export default function Home() {
   const runTranslation = async (isResume: boolean) => {
     abortRef.current = false
     setCancelling(false)
-    if (!isResume) { setHasReviewEdits(false); drawerStateRef.current = null }
+    if (!isResume) { setHasReviewEdits(false); drawerStateRef.current = null; clearSession() }
 
     let doc: Document
     let units: import('@/lib/xliff').TransUnit[]
@@ -277,6 +376,23 @@ export default function Home() {
     let done = startFrom
     let totalMs = 0
 
+    // Helper — captures current translation state into localStorage.
+    const checkpoint = (saveStatus: 'done' | 'paused', doneSoFar: number) => {
+      if (!docRef.current) return
+      writeSession({
+        translatedXml: serializeXliff(docRef.current),
+        originalXml: originalXmlRef.current,
+        xliffContent,
+        fileName,
+        detectedSourceLanguage,
+        targetLanguage: effectiveLanguage,
+        customLanguage,
+        status: saveStatus,
+        progress: doneSoFar,
+        errors: [...errorList],
+      })
+    }
+
     for (let i = startFrom; i < units.length; i++) {
       if (abortRef.current) break
 
@@ -298,6 +414,10 @@ export default function Home() {
       totalMs += Date.now() - segStart
       setAvgSegmentMs(totalMs / (done - startFrom))
       setProgress(done)
+
+      // Checkpoint every 5 segments so a mid-translation page close
+      // loses at most 5 segments rather than the whole run.
+      if (done % 5 === 0) checkpoint('paused', done)
     }
 
     setCancelling(false)
@@ -306,13 +426,16 @@ export default function Home() {
     if (abortRef.current) {
       // Cancelled — go to paused state so the user can resume or download partial
       setStatus('paused')
+      checkpoint('paused', done)
     } else {
       const xml = serializeXliff(doc)
       originalXmlRef.current = xml  // snapshot before any manual edits
       const blob = new Blob([xml], { type: 'application/xml' })
       const url = URL.createObjectURL(blob)
       setOutputBlob(url)
-      setStatus(errorList.length > 0 && done === errorList.length ? 'error' : 'done')
+      const finalStatus = errorList.length > 0 && done === errorList.length ? 'error' : 'done'
+      setStatus(finalStatus)
+      if (finalStatus === 'done') checkpoint('done', done)
     }
   }
 
@@ -361,6 +484,7 @@ export default function Home() {
 
   const reset = () => {
     abortRef.current = true
+    clearSession()
     docRef.current = null
     allUnitsRef.current = []
     doneCountRef.current = 0
@@ -368,6 +492,7 @@ export default function Home() {
     drawerStateRef.current = null
     setShowReview(false)
     setHasReviewEdits(false)
+    setSessionRestored(false)
     setStatus('idle')
     setXliffContent('')
     setFileName('')
@@ -448,24 +573,29 @@ export default function Home() {
           style={{ background: 'rgba(43,45,66,0.65)' }}
           onClick={() => setShowSettings(false)}
         >
-          <div className="retro-card w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="retro-card w-full max-w-lg"
+            style={{ maxHeight: '90vh', overflowY: 'auto' }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-6 space-y-5">
               <div className="flex items-center justify-between mb-1">
                 <h2 className="text-base font-bold" style={{ fontFamily: 'var(--font-heading)' }}>LLM Configuration</h2>
-                <button
-                  onClick={() => setShowSettings(false)}
-                  className="retro-btn btn-ghost"
-                  style={{ padding: '0.35rem', lineHeight: 1 }}
-                >
+                <button onClick={() => setShowSettings(false)} className="retro-btn btn-ghost" style={{ padding: '0.35rem', lineHeight: 1 }}>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
+
+              {/* API Endpoint */}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-widest mb-2" style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>
+                <label className="block text-xs font-bold uppercase tracking-widest mb-1" style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>
                   API Endpoint
                 </label>
+                <p className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
+                  The full URL for an OpenAI-compatible chat completions endpoint. Leave as default to use the internal Atko LLM proxy, or enter your own provider's URL.
+                </p>
                 <input
                   type="url"
                   value={configDraft.apiUrl}
@@ -474,10 +604,15 @@ export default function Home() {
                   className="retro-input"
                 />
               </div>
+
+              {/* Model */}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-widest mb-2" style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>
+                <label className="block text-xs font-bold uppercase tracking-widest mb-1" style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>
                   Model
                 </label>
+                <p className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
+                  The model used for every translation segment. Larger models are higher quality but slower and more expensive. GPT-4o is a good default for course content.
+                </p>
                 <select
                   value={KNOWN_MODELS.includes(configDraft.model) ? configDraft.model : '__custom__'}
                   onChange={(e) => {
@@ -508,10 +643,19 @@ export default function Home() {
                   />
                 )}
               </div>
+
+              {/* API Key */}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-widest mb-2" style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>
+                <label className="block text-xs font-bold uppercase tracking-widest mb-1" style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>
                   API Key
                 </label>
+                <p className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
+                  Your secret key from the provider selected above.{' '}
+                  {/* ↓ Replace href with your internal docs URL */}
+                  <a href="#" style={{ color: 'var(--primary)', fontWeight: 600, textDecoration: 'underline' }}>
+                    How do I get an API key? →
+                  </a>
+                </p>
                 <div style={{ position: 'relative' }}>
                   <input
                     type={showApiKey ? 'text' : 'password'}
@@ -540,9 +684,142 @@ export default function Home() {
                     )}
                   </button>
                 </div>
-                <p className="mt-2 text-xs" style={{ fontFamily: 'var(--font-mono)', color: 'var(--primary-dark)', fontSize: '0.65rem' }}>
+                <p className="mt-2" style={{ fontFamily: 'var(--font-mono)', color: 'var(--primary-dark)', fontSize: '0.65rem' }}>
                   ⚠ stored in localStorage — avoid shared computers
                 </p>
+              </div>
+
+              {/* Check Access */}
+              <div>
+                <button
+                  onClick={checkAccess}
+                  disabled={checkingAccess || !configDraft.apiKey || !configDraft.model}
+                  className="retro-btn btn-ghost w-full"
+                  style={{ fontSize: '0.82rem' }}
+                >
+                  {checkingAccess ? (
+                    <>Checking…</>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Check Access
+                    </>
+                  )}
+                </button>
+                {accessResult && (
+                  <div
+                    className="mt-2 p-3"
+                    style={{
+                      border: '2px solid var(--ink)',
+                      background: accessResult.ok ? 'rgba(112,224,0,0.1)' : 'rgba(241,91,181,0.08)',
+                    }}
+                  >
+                    <p style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '0.7rem',
+                      color: accessResult.ok ? 'var(--secondary-dark)' : 'var(--accent-dark)',
+                      lineHeight: 1.6,
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                    }}>
+                      {accessResult.ok ? '✓ ' : '✗ '}{accessResult.message}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* System Prompt */}
+              <div style={{ borderTop: '2px solid var(--ink)', paddingTop: '1.25rem' }}>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold uppercase tracking-widest" style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>
+                    System Prompt
+                  </label>
+                  {configDraft.promptMode !== 'standard' && (
+                    <button
+                      onClick={() => setConfigDraft((c) => ({ ...c, promptMode: 'standard', customPrompt: '' }))}
+                      className="retro-btn btn-ghost"
+                      style={{ fontSize: '0.68rem', padding: '0.2rem 0.5rem' }}
+                    >
+                      ↩ Restore default
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs mb-3" style={{ color: 'var(--muted)' }}>
+                  Controls how the LLM approaches each translation. Append extra instructions (e.g. tone, glossary terms) or replace the prompt entirely for specialised use cases.
+                </p>
+
+                {/* Mode selector */}
+                <div className="flex gap-2 mb-3">
+                  {(['standard', 'append', 'replace'] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setConfigDraft((c) => ({ ...c, promptMode: m }))}
+                      className="retro-btn"
+                      style={{
+                        fontSize: '0.7rem',
+                        padding: '0.3rem 0.65rem',
+                        background: configDraft.promptMode === m ? 'var(--primary)' : 'transparent',
+                        color: configDraft.promptMode === m ? 'var(--paper)' : 'var(--muted)',
+                        borderColor: configDraft.promptMode === m ? 'var(--primary)' : 'var(--ink)',
+                        textTransform: 'capitalize',
+                      }}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Standard: read-only preview */}
+                {configDraft.promptMode === 'standard' && (
+                  <div className="p-3" style={{ background: 'var(--canvas)', border: '1px solid var(--ink)', fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--muted)', lineHeight: 1.6 }}>
+                    {DEFAULT_SYSTEM_PROMPT}
+                  </div>
+                )}
+
+                {/* Shared variable hint — shown in append and replace modes */}
+                {configDraft.promptMode !== 'standard' && (
+                  <p className="mb-2" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--muted)' }}>
+                    Use{' '}
+                    <code style={{ background: 'var(--canvas)', border: '1px solid var(--ink)', padding: '0.05rem 0.35rem', fontFamily: 'var(--font-mono)', color: 'var(--ink)', borderRadius: '2px' }}>
+                      {'{targetLanguage}'}
+                    </code>
+                    {' '}to insert the selected language (e.g. <em>Spanish (es-ES)</em>).
+                  </p>
+                )}
+
+                {/* Append: show standard (muted) + textarea for addition */}
+                {configDraft.promptMode === 'append' && (
+                  <div className="space-y-2">
+                    <div className="p-3" style={{ background: 'var(--canvas)', border: '1px solid #e5e5e5', fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: '#aaa', lineHeight: 1.6 }}>
+                      {DEFAULT_SYSTEM_PROMPT}
+                    </div>
+                    <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--muted)' }}>
+                      ↓ followed by your addition
+                    </div>
+                    <textarea
+                      value={configDraft.customPrompt}
+                      onChange={(e) => setConfigDraft((c) => ({ ...c, customPrompt: e.target.value }))}
+                      placeholder="e.g. Maintain a formal tone. Do not translate product names."
+                      rows={4}
+                      className="retro-input w-full"
+                      style={{ fontSize: '0.8rem', resize: 'vertical', lineHeight: 1.6 }}
+                    />
+                  </div>
+                )}
+
+                {/* Replace: full custom prompt */}
+                {configDraft.promptMode === 'replace' && (
+                  <textarea
+                    value={configDraft.customPrompt}
+                    onChange={(e) => setConfigDraft((c) => ({ ...c, customPrompt: e.target.value }))}
+                    placeholder={DEFAULT_SYSTEM_PROMPT}
+                    rows={6}
+                    className="retro-input w-full"
+                    style={{ fontSize: '0.8rem', resize: 'vertical', lineHeight: 1.6 }}
+                  />
+                )}
               </div>
 
               <div className="flex gap-3 pt-1">
@@ -560,6 +837,27 @@ export default function Home() {
 
       {/* ── Main ───────────────────────────────────────────── */}
       <main className="max-w-2xl mx-auto px-4 py-10 space-y-5">
+
+        {/* Session restored banner */}
+        {sessionRestored && (
+          <div className="retro-alert alert-info flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} style={{ color: 'var(--info, #457b9d)' }}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <p className="text-sm">
+                <strong>Session restored</strong> — your previous translation for <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85em' }}>{fileName}</span> has been loaded.
+              </p>
+            </div>
+            <button
+              onClick={() => setSessionRestored(false)}
+              className="retro-btn btn-ghost shrink-0"
+              style={{ padding: '0.25rem 0.5rem', fontSize: '0.72rem', marginLeft: '0.75rem' }}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* Instructions */}
         <div className="retro-card-dashed p-5">
@@ -738,6 +1036,9 @@ export default function Home() {
               <div className="flex items-center gap-3 mb-5">
                 <span className="retro-section-num">▶</span>
                 <h2 className="text-base font-bold" style={{ fontFamily: 'var(--font-heading)' }}>Translating…</h2>
+                <span className="retro-badge badge-outline ml-auto" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem' }}>
+                  {config.model}
+                </span>
               </div>
 
               <div className="retro-progress-track mb-2">

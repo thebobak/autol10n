@@ -8,10 +8,11 @@
  *   endpoints often don't. Running the call here on the server sidesteps CORS
  *   entirely and also keeps the API key out of browser network logs.
  *
- * Request shape:  { sourceXml, targetLanguage, apiUrl, apiKey, model }
+ * Request shape:  { sourceXml, targetLanguage, apiUrl, apiKey, model, promptMode?, customPrompt? }
  * Response shape: { translation: string }  |  { error: string }
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { buildSystemPrompt } from '@/lib/prompt'
 
 // Allow up to 60 s for a single segment translation before the platform
 // kills the function. Most LLM calls finish in < 15 s; this headroom handles
@@ -47,7 +48,7 @@ function resolveEndpoint(raw?: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  const { sourceXml, targetLanguage, apiUrl, apiKey, model } = await req.json()
+  const { sourceXml, targetLanguage, apiUrl, apiKey, model, promptMode, customPrompt } = await req.json()
 
   if (!apiKey) return NextResponse.json({ error: 'API key required' }, { status: 400 })
   if (!sourceXml) return NextResponse.json({ error: 'sourceXml required' }, { status: 400 })
@@ -56,11 +57,11 @@ export async function POST(req: NextRequest) {
   const endpoint = resolveEndpoint(apiUrl)
 
   const body = {
-    model: model || 'gpt-4o',
+    model: model || 'gemini-3.1-pro-preview',
     messages: [
       {
         role: 'system',
-        content: `You are a professional localizer. Translate the following text into ${targetLanguage}. Preserve all XML/HTML tags exactly as they appear. Output ONLY the translated text with its original tags preserved — no commentary, no explanations, no wrapping.`,
+        content: buildSystemPrompt(targetLanguage, promptMode ?? 'standard', customPrompt ?? ''),
       },
       {
         role: 'user',
@@ -100,7 +101,7 @@ export async function POST(req: NextRequest) {
   if (!llmResponse.ok) {
     const text = await llmResponse.text().catch(() => '')
     return NextResponse.json(
-      { error: `LLM API error ${llmResponse.status}: ${text.slice(0, 300)}` },
+      { error: `LLM API error ${llmResponse.status}: ${text}` },
       { status: llmResponse.status }
     )
   }

@@ -14,7 +14,10 @@ interface Props {
 export default function OnboardingModal({ initialConfig, onSaveConfig, onComplete, onStartTour }: Props) {
   const [stepIdx, setStepIdx] = useState(0)
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
-  const [draft, setDraft] = useState<LlmConfig>(initialConfig)
+  const [draft, setDraft] = useState<LlmConfig>({
+    ...{ promptMode: 'standard' as const, customPrompt: '' },
+    ...initialConfig,
+  })
   const [showKey, setShowKey] = useState(false)
 
   const step = ONBOARDING_STEPS[stepIdx]
