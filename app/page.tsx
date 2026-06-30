@@ -6,7 +6,7 @@ import type { LlmConfig, TranslationError, TranslationStatus } from '@/lib/types
 import OnboardingModal from '@/components/OnboardingModal'
 import TourModal from '@/components/TourModal'
 import InfoModal from '@/components/InfoModal'
-import ReviewDrawer from '@/components/ReviewDrawer'
+import ReviewDrawer, { type DrawerState } from '@/components/ReviewDrawer'
 
 const ONBOARDING_KEY = 'autol10n_onboarded'
 
@@ -137,6 +137,7 @@ export default function Home() {
   // Snapshot of the serialized XML taken immediately after translation
   // completes — before any manual edits. Used for "Download Original" option.
   const originalXmlRef = useRef<string | null>(null)
+  const drawerStateRef = useRef<DrawerState | null>(null)
 
   // Load config from localStorage after mount to avoid hydration mismatch
   useEffect(() => {
@@ -234,7 +235,7 @@ export default function Home() {
   const runTranslation = async (isResume: boolean) => {
     abortRef.current = false
     setCancelling(false)
-    if (!isResume) setHasReviewEdits(false)
+    if (!isResume) { setHasReviewEdits(false); drawerStateRef.current = null }
 
     let doc: Document
     let units: import('@/lib/xliff').TransUnit[]
@@ -364,6 +365,7 @@ export default function Home() {
     allUnitsRef.current = []
     doneCountRef.current = 0
     originalXmlRef.current = null
+    drawerStateRef.current = null
     setShowReview(false)
     setHasReviewEdits(false)
     setStatus('idle')
@@ -907,7 +909,7 @@ export default function Home() {
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                   </svg>
-                  Download Translated XLIFF
+                  {hasReviewEdits ? 'Download Edited XLIFF' : 'Download Translated XLIFF'}
                 </button>
                 {hasReviewEdits && <button
                   onClick={downloadOriginal}
@@ -960,7 +962,7 @@ export default function Home() {
             </div>
           </div>
           <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--muted)', textAlign: 'right' }}>
-            Created by Bobak Shafiei<br />
+            Created by Bobak Shafiei <a href="slack://okta.enterprise.slack.com/team/U08FNRBR5GX" target="_blank">(@thebobak)</a><br />
             <button
               onClick={() => setShowInfo(true)}
               style={{ color: 'var(--disabled)', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit' }}
@@ -988,8 +990,10 @@ export default function Home() {
         <ReviewDrawer
           units={allUnitsRef.current}
           errorUnitIds={new Set(errors?.map((e) => e.unitId) ?? [])}
+          savedState={drawerStateRef.current}
           onClose={() => setShowReview(false)}
-          onEditSaved={() => setHasReviewEdits(true)}
+          onEditsChange={(count) => setHasReviewEdits(count > 0)}
+          onSaveState={(s) => { drawerStateRef.current = s; setHasReviewEdits(s.editedEls.size > 0) }}
         />
       )}
 

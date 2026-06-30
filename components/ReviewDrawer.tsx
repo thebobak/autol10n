@@ -1,6 +1,11 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+
+export type DrawerState = {
+  editedEls: Set<Element>
+  initialTexts: Map<Element, string>
+}
 import type { TransUnit } from '@/lib/xliff'
 import { setTranslation } from '@/lib/xliff'
 
@@ -131,27 +136,38 @@ type Filter = 'all' | 'errors' | 'edited'
 interface Props {
   units: TransUnit[]
   errorUnitIds: Set<string>
+  savedState: DrawerState | null
   onClose: () => void
-  onEditSaved: () => void
+  onEditsChange: (count: number) => void
+  onSaveState: (state: DrawerState) => void
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ReviewDrawer({ units, errorUnitIds, onClose, onEditSaved }: Props) {
+export default function ReviewDrawer({ units, errorUnitIds, savedState, onClose, onEditsChange, onSaveState }: Props) {
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
   const [editingEl, setEditingEl] = useState<Element | null>(null)
   const [draftText, setDraftText] = useState('')
   // Use Element references as keys — unit.id is not unique across <file> sections
   // (multiple trans-units can legitimately share id="title").
-  const [editedEls, setEditedEls] = useState<Set<Element>>(new Set())
+  const [editedEls, setEditedEls] = useState<Set<Element>>(
+    () => savedState?.editedEls ?? new Set()
+  )
 
-  // Snapshot of every unit's text taken when the drawer opens — used for Revert.
+  // Restore from saved state if available; otherwise snapshot current target text.
   const [initialTexts] = useState<Map<Element, string>>(() => {
+    if (savedState) return savedState.initialTexts
     const snap = new Map<Element, string>()
     for (const unit of units) snap.set(unit.element, getTargetText(unit))
     return snap
   })
+
+  // Persist state when the drawer unmounts so it can be restored on reopen.
+  // Use a ref to always capture the latest values in the cleanup closure.
+  const stateRef = useRef<DrawerState>({ editedEls, initialTexts })
+  useEffect(() => { stateRef.current = { editedEls, initialTexts } })
+  useEffect(() => { return () => onSaveState(stateRef.current) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const startEdit = (unit: TransUnit) => {
     setDraftText(getTargetText(unit))
@@ -160,17 +176,21 @@ export default function ReviewDrawer({ units, errorUnitIds, onClose, onEditSaved
 
   const saveEdit = (unit: TransUnit) => {
     applyTextEdit(unit, draftText)
-    setEditedEls((prev) => new Set([...prev, unit.element]))
+    const next = new Set([...editedEls, unit.element])
+    setEditedEls(next)
     setEditingEl(null)
-    onEditSaved()
+    onEditsChange(next.size)
   }
 
   const cancelEdit = () => setEditingEl(null)
 
   const revertUnit = (unit: TransUnit) => {
     applyTextEdit(unit, initialTexts.get(unit.element) ?? '')
-    setEditedEls((prev) => { const next = new Set(prev); next.delete(unit.element); return next })
+    const next = new Set(editedEls)
+    next.delete(unit.element)
+    setEditedEls(next)
     if (editingEl === unit.element) setEditingEl(null)
+    onEditsChange(next.size)
   }
 
   const revertAll = () => {
@@ -179,6 +199,7 @@ export default function ReviewDrawer({ units, errorUnitIds, onClose, onEditSaved
     }
     setEditedEls(new Set())
     setEditingEl(null)
+    onEditsChange(0)
   }
 
   const filtered = useMemo(() => {
@@ -312,7 +333,7 @@ export default function ReviewDrawer({ units, errorUnitIds, onClose, onEditSaved
 
               return (
                 <div
-                  key={unit.id}
+                  key={idx}
                   style={{
                     borderBottom: '1px solid #e5e5e5',
                     background: idx % 2 === 0 ? 'var(--paper)' : 'var(--canvas)',

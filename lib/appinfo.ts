@@ -24,6 +24,24 @@ export type ChangelogEntry = {
 // ─── Add new entries at the TOP of this array ────────────────────────────────
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026.06.30',
+    label: 'v1.0',
+    changes: [
+      'Translation review drawer — side-by-side source and translation with plain-text editing',
+      'Edits applied surgically via character-level diff, preserving all XML tag structure (bold, italic, etc.)',
+      'Per-segment Revert (↩) and global Revert All restore the original AI translation',
+      'Edit state persists across drawer open/close; Edited filter and revert buttons survive unmount',
+      'Download Edited XLIFF includes all manual edits; Download Original AI Translation available when edits exist',
+      'Download button label changes to "Download Edited XLIFF" when manual edits have been made',
+      'Fixed duplicate trans-unit id="title" collision — element references used as keys throughout',
+      'Pause and Resume translation — cancel mid-run and continue from exactly where you stopped',
+      'Partial download available in paused state; errors carry forward on resume',
+      'Cancel button shows "Cancelling…" while in-flight request completes',
+      'Segment counter and estimated time remaining displayed below progress bar',
+      'Build version now includes hour (e.g. 2026.06.30.09) to distinguish same-day deploys',
+    ],
+  },
+  {
     date: '2026.06.29',
     label: 'v0.4',
     changes: [
