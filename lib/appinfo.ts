@@ -25,6 +25,20 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026.06.29',
+    label: 'v0.4',
+    changes: [
+      'Added estimated time remaining during translation (rolling average of API response times)',
+      'Added segment count display (e.g. "45 / 200 segments") below the progress bar',
+      'Cancel button now shows "Cancelling…" feedback while the in-flight request completes',
+      'Styled previously invisible text-only buttons (Cancel, error log toggle, settings close, remove file)',
+      'Removed terminal-style $ prefix from the translating status message',
+      'Committed pre-built .next/ to repo to fix Kubernetes container deployment (nonroot permissions)',
+      'Added server.js entry point for platforms that require an explicit Node.js entry file',
+      'Moved tailwindcss and @tailwindcss/postcss to production dependencies for build compatibility',
+    ],
+  },
+  {
+    date: '2026.06.29',
     label: 'v0.3',
     changes: [
       'Added onboarding wizard that guides new users through API configuration',

@@ -9,4 +9,4 @@ export interface TranslationError {
   message: string
 }
 
-export type TranslationStatus = 'idle' | 'translating' | 'done' | 'error'
+export type TranslationStatus = 'idle' | 'translating' | 'paused' | 'done' | 'error'

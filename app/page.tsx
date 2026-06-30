@@ -30,6 +30,15 @@ const LANGUAGE_OPTIONS = [
   'Polish (pl-PL)', 'Russian (ru-RU)', 'Swedish (sv-SE)', 'Turkish (tr-TR)',
 ]
 
+function formatTimeRemaining(ms: number): string {
+  const sec = Math.round(ms / 1000)
+  if (sec <= 3) return 'almost done'
+  if (sec < 60) return `~${sec}s remaining`
+  const min = Math.floor(sec / 60)
+  const s = sec % 60
+  return s > 0 ? `~${min}m ${s}s remaining` : `~${min}m remaining`
+}
+
 async function translateUnit(
   unit: TransUnit,
   targetLanguage: string,
@@ -105,6 +114,8 @@ export default function Home() {
   const [progress, setProgress] = useState(0)
   const [total, setTotal] = useState(0)
   const [currentUnitId, setCurrentUnitId] = useState('')
+  const [avgSegmentMs, setAvgSegmentMs] = useState<number | null>(null)
+  const [cancelling, setCancelling] = useState(false)
   const [errors, setErrors] = useState<TranslationError[]>()
   const [outputBlob, setOutputBlob] = useState<string | null>(null)
   const [showErrorLog, setShowErrorLog] = useState(false)
@@ -115,6 +126,11 @@ export default function Home() {
   // asynchronous and batched — the loop would process at least one extra
   // segment before a state change propagated.
   const abortRef = useRef(false)
+  // Persist the live XML DOM, unit list, and done count across cancel/resume
+  // so already-translated segments are preserved when the user pauses.
+  const docRef = useRef<Document | null>(null)
+  const allUnitsRef = useRef<import('@/lib/xliff').TransUnit[]>([])
+  const doneCountRef = useRef(0)
 
   // Load config from localStorage after mount to avoid hydration mismatch
   useEffect(() => {
@@ -206,40 +222,60 @@ export default function Home() {
     !!xliffContent &&
     !!effectiveLanguage.trim() &&
     !!config.apiKey &&
-    status !== 'translating'
+    status !== 'translating' &&
+    status !== 'paused'
 
-  const startTranslation = async () => {
-    if (!canStart) return
+  const runTranslation = async (isResume: boolean) => {
     abortRef.current = false
+    setCancelling(false)
 
-    let parsed
-    try {
-      parsed = parseXliff(xliffContent)
-    } catch (err) {
-      alert(`Failed to parse XLIFF: ${err instanceof Error ? err.message : err}`)
-      return
-    }
+    let doc: Document
+    let units: import('@/lib/xliff').TransUnit[]
+    let startFrom: number
 
-    const { doc, units } = parsed
-    if (units.length === 0) {
-      alert('No translatable units found in this file.')
-      return
+    if (isResume && docRef.current && allUnitsRef.current.length > 0) {
+      // Reuse the live DOM — already-translated <target> elements are intact
+      doc = docRef.current
+      units = allUnitsRef.current
+      startFrom = doneCountRef.current
+    } else {
+      let parsed
+      try {
+        parsed = parseXliff(xliffContent)
+      } catch (err) {
+        alert(`Failed to parse XLIFF: ${err instanceof Error ? err.message : err}`)
+        return
+      }
+      if (parsed.units.length === 0) {
+        alert('No translatable units found in this file.')
+        return
+      }
+      doc = parsed.doc
+      units = parsed.units
+      docRef.current = doc
+      allUnitsRef.current = units
+      startFrom = 0
+      doneCountRef.current = 0
     }
 
     setStatus('translating')
     setTotal(units.length)
-    setProgress(0)
-    setErrors([])
+    setProgress(startFrom)
+    if (!isResume) setErrors([])
     setOutputBlob(null)
+    setAvgSegmentMs(null)
 
-    const errorList: TranslationError[] = []
-    let done = 0
+    const errorList: TranslationError[] = isResume ? [...(errors ?? [])] : []
+    let done = startFrom
+    let totalMs = 0
 
-    for (const unit of units) {
+    for (let i = startFrom; i < units.length; i++) {
       if (abortRef.current) break
 
+      const unit = units[i]
       setCurrentUnitId(unit.id)
 
+      const segStart = Date.now()
       try {
         const translated = await translateUnit(unit, effectiveLanguage, config)
         setTranslation(unit, translated)
@@ -250,16 +286,33 @@ export default function Home() {
       }
 
       done++
+      doneCountRef.current = done
+      totalMs += Date.now() - segStart
+      setAvgSegmentMs(totalMs / (done - startFrom))
       setProgress(done)
     }
 
-    const xml = serializeXliff(doc)
-    const blob = new Blob([xml], { type: 'application/xml' })
-    const url = URL.createObjectURL(blob)
-    setOutputBlob(url)
-    setStatus(errorList.length > 0 && done === errorList.length ? 'error' : 'done')
+    setCancelling(false)
     setCurrentUnitId('')
+
+    if (abortRef.current) {
+      // Cancelled — go to paused state so the user can resume or download partial
+      setStatus('paused')
+    } else {
+      const xml = serializeXliff(doc)
+      const blob = new Blob([xml], { type: 'application/xml' })
+      const url = URL.createObjectURL(blob)
+      setOutputBlob(url)
+      setStatus(errorList.length > 0 && done === errorList.length ? 'error' : 'done')
+    }
   }
+
+  const startTranslation = () => {
+    if (!canStart) return
+    runTranslation(false)
+  }
+
+  const resumeTranslation = () => runTranslation(true)
 
   const downloadFile = () => {
     if (!outputBlob) return
@@ -270,8 +323,23 @@ export default function Home() {
     a.click()
   }
 
+  const downloadPartial = () => {
+    if (!docRef.current) return
+    const xml = serializeXliff(docRef.current)
+    const blob = new Blob([xml], { type: 'application/xml' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName.replace(/\.xlf(f?)$/i, '_partial.$1') || 'partial.xlf'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const reset = () => {
     abortRef.current = true
+    docRef.current = null
+    allUnitsRef.current = []
+    doneCountRef.current = 0
     setStatus('idle')
     setXliffContent('')
     setFileName('')
@@ -358,7 +426,8 @@ export default function Home() {
                 <h2 className="text-base font-bold" style={{ fontFamily: 'var(--font-heading)' }}>LLM Configuration</h2>
                 <button
                   onClick={() => setShowSettings(false)}
-                  style={{ color: 'var(--muted)', lineHeight: 1 }}
+                  className="retro-btn btn-ghost"
+                  style={{ padding: '0.35rem', lineHeight: 1 }}
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -551,7 +620,7 @@ export default function Home() {
                     <span className="retro-badge badge-outline">{detectedSourceLanguage}</span>
                   )}
                   {status !== 'translating' && (
-                    <button onClick={reset} style={{ color: 'var(--muted)' }} title="Remove file">
+                    <button onClick={reset} className="retro-btn btn-ghost" style={{ padding: '0.35rem' }} title="Remove file">
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                       </svg>
@@ -643,22 +712,35 @@ export default function Home() {
                 <h2 className="text-base font-bold" style={{ fontFamily: 'var(--font-heading)' }}>Translating…</h2>
               </div>
 
-              <div className="retro-progress-track mb-3">
+              <div className="retro-progress-track mb-2">
                 <div className="retro-progress-fill" style={{ width: `${progressPct}%` }} />
               </div>
 
-              {currentUnitId && (
-                <p className="text-xs truncate" style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted)', fontSize: '0.68rem' }}>
-                  $ translating <span style={{ color: 'var(--ink)', fontWeight: 700 }}>{currentUnitId}</span>
+              {/* Count + time estimate */}
+              <div className="flex items-center justify-between mb-1">
+                <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--ink)', fontWeight: 700 }}>
+                  {progress} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>/ {total} segments</span>
                 </p>
-              )}
+                {avgSegmentMs !== null && progress < total && (
+                  <p className="shrink-0 ml-3" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--muted)' }}>
+                    {formatTimeRemaining(avgSegmentMs * (total - progress))}
+                  </p>
+                )}
+              </div>
+
+              {/* Current unit status */}
+              <p className="text-xs truncate mb-3" style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted)', fontSize: '0.65rem' }}>
+                {currentUnitId
+                  ? <>Translating <span style={{ color: 'var(--ink)', fontWeight: 700 }}>{currentUnitId}</span></>
+                  : <>&nbsp;</>}
+              </p>
 
               {errors && errors.length > 0 && (
                 <div className="mt-4">
                   <button
                     onClick={() => setShowErrorLog((v) => !v)}
-                    className="flex items-center gap-1.5 text-xs font-bold"
-                    style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-dark)', fontSize: '0.7rem', letterSpacing: '0.05em' }}
+                    className="retro-btn btn-ghost"
+                    style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-dark)', fontSize: '0.7rem', letterSpacing: '0.05em', padding: '0.3rem 0.6rem' }}
                   >
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -678,12 +760,61 @@ export default function Home() {
               )}
 
               <button
-                onClick={() => { abortRef.current = true }}
-                className="mt-4 text-xs"
-                style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted)', fontSize: '0.68rem' }}
+                onClick={() => { abortRef.current = true; setCancelling(true) }}
+                disabled={cancelling}
+                className="retro-btn btn-ghost mt-4"
+                style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', padding: '0.3rem 0.7rem' }}
               >
-                $ cancel
+                {cancelling ? 'Cancelling…' : 'Cancel'}
               </button>
+            </div>
+          </section>
+        )}
+
+        {/* ── Paused ──────────────────────────────────────── */}
+        {status === 'paused' && (
+          <section className="retro-card">
+            <div className="p-6">
+              <div className="flex items-center gap-4 mb-6 pb-5" style={{ borderBottom: '2px solid var(--ink)' }}>
+                <div className="w-10 h-10 flex items-center justify-center shrink-0" style={{ background: 'var(--primary-light)', border: '2px solid var(--ink)', boxShadow: 'var(--shadow-sm)' }}>
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} style={{ color: 'var(--ink)' }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 9v6m4-6v6" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-base font-bold" style={{ fontFamily: 'var(--font-heading)' }}>Translation paused</h2>
+                  <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--muted)' }}>
+                    {progress} of {total} segments completed
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={resumeTranslation}
+                  className="retro-btn btn-primary w-full py-3 text-base"
+                  style={{ letterSpacing: '0.04em' }}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Resume Translation
+                </button>
+                <button
+                  onClick={downloadPartial}
+                  className="retro-btn w-full"
+                  style={{ borderStyle: 'dashed', background: 'rgba(251,133,0,0.05)', color: 'var(--primary-dark)', letterSpacing: '0.03em' }}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download Partial ({progress} of {total} segments)
+                </button>
+                <button onClick={reset} className="retro-btn btn-ghost w-full">
+                  Start Over
+                </button>
+              </div>
             </div>
           </section>
         )}
@@ -711,8 +842,8 @@ export default function Home() {
                 <div className="mb-4">
                   <button
                     onClick={() => setShowErrorLog((v) => !v)}
-                    className="flex items-center gap-1.5 text-xs font-bold"
-                    style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-dark)', fontSize: '0.7rem', letterSpacing: '0.05em' }}
+                    className="retro-btn btn-ghost"
+                    style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-dark)', fontSize: '0.7rem', letterSpacing: '0.05em', padding: '0.3rem 0.6rem' }}
                   >
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
