@@ -140,50 +140,51 @@ interface Props {
 export default function ReviewDrawer({ units, errorUnitIds, onClose, onEditSaved }: Props) {
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingEl, setEditingEl] = useState<Element | null>(null)
   const [draftText, setDraftText] = useState('')
-  const [editedIds, setEditedIds] = useState<Set<string>>(new Set())
+  // Use Element references as keys — unit.id is not unique across <file> sections
+  // (multiple trans-units can legitimately share id="title").
+  const [editedEls, setEditedEls] = useState<Set<Element>>(new Set())
 
   // Snapshot of every unit's text taken when the drawer opens — used for Revert.
-  const [initialTexts] = useState<Record<string, string>>(() => {
-    const snap: Record<string, string> = {}
-    for (const unit of units) snap[unit.id] = getTargetText(unit)
+  const [initialTexts] = useState<Map<Element, string>>(() => {
+    const snap = new Map<Element, string>()
+    for (const unit of units) snap.set(unit.element, getTargetText(unit))
     return snap
   })
 
   const startEdit = (unit: TransUnit) => {
     setDraftText(getTargetText(unit))
-    setEditingId(unit.id)
+    setEditingEl(unit.element)
   }
 
   const saveEdit = (unit: TransUnit) => {
     applyTextEdit(unit, draftText)
-    setEditedIds((prev) => new Set([...prev, unit.id]))
-    setEditingId(null)
+    setEditedEls((prev) => new Set([...prev, unit.element]))
+    setEditingEl(null)
     onEditSaved()
   }
 
-  const cancelEdit = () => setEditingId(null)
+  const cancelEdit = () => setEditingEl(null)
 
   const revertUnit = (unit: TransUnit) => {
-    const original = initialTexts[unit.id] ?? ''
-    applyTextEdit(unit, original)
-    setEditedIds((prev) => { const next = new Set(prev); next.delete(unit.id); return next })
-    if (editingId === unit.id) setEditingId(null)
+    applyTextEdit(unit, initialTexts.get(unit.element) ?? '')
+    setEditedEls((prev) => { const next = new Set(prev); next.delete(unit.element); return next })
+    if (editingEl === unit.element) setEditingEl(null)
   }
 
   const revertAll = () => {
     for (const unit of units) {
-      if (editedIds.has(unit.id)) applyTextEdit(unit, initialTexts[unit.id] ?? '')
+      if (editedEls.has(unit.element)) applyTextEdit(unit, initialTexts.get(unit.element) ?? '')
     }
-    setEditedIds(new Set())
-    setEditingId(null)
+    setEditedEls(new Set())
+    setEditingEl(null)
   }
 
   const filtered = useMemo(() => {
     let list = units
     if (filter === 'errors') list = list.filter((u) => errorUnitIds.has(u.id))
-    if (filter === 'edited') list = list.filter((u) => editedIds.has(u.id))
+    if (filter === 'edited') list = list.filter((u) => editedEls.has(u.element))
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter((u) => {
@@ -193,11 +194,11 @@ export default function ReviewDrawer({ units, errorUnitIds, onClose, onEditSaved
       })
     }
     return list
-  }, [units, filter, search, editedIds, errorUnitIds])
+  }, [units, filter, search, editedEls, errorUnitIds])
 
   const filterLabel = (f: Filter) => {
     if (f === 'errors') return errorUnitIds.size > 0 ? `Errors (${errorUnitIds.size})` : 'Errors'
-    if (f === 'edited') return editedIds.size > 0 ? `Edited (${editedIds.size})` : 'Edited'
+    if (f === 'edited') return editedEls.size > 0 ? `Edited (${editedEls.size})` : 'Edited'
     return 'All'
   }
 
@@ -304,8 +305,8 @@ export default function ReviewDrawer({ units, errorUnitIds, onClose, onEditSaved
           ) : (
             filtered.map((unit, idx) => {
               const targetText = getTargetText(unit)
-              const isEditing = editingId === unit.id
-              const isEdited = editedIds.has(unit.id)
+              const isEditing = editingEl === unit.element
+              const isEdited = editedEls.has(unit.element)
               const hasError = errorUnitIds.has(unit.id)
               const sourcePlain = stripTags(unit.sourceXml)
 
@@ -421,14 +422,14 @@ export default function ReviewDrawer({ units, errorUnitIds, onClose, onEditSaved
         </div>
 
         {/* ── Footer ── */}
-        {editedIds.size > 0 && (
+        {editedEls.size > 0 && (
           <div
             className="shrink-0 flex items-center justify-between gap-4 px-5 py-3"
             style={{ borderTop: '2px solid var(--ink)', background: 'var(--canvas)' }}
           >
             <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--ink)' }}>
-              <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{editedIds.size}</span>
-              {' '}segment{editedIds.size !== 1 ? 's' : ''} manually edited — included in next download.
+              <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{editedEls.size}</span>
+              {' '}segment{editedEls.size !== 1 ? 's' : ''} manually edited — included in next download.
             </p>
             <button
               onClick={revertAll}
