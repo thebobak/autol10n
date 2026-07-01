@@ -24,15 +24,7 @@ export default function InfoModal({ onClose }: Props) {
         <div className="p-6 pb-0 shrink-0">
           <div className="flex items-start justify-between mb-5">
             <div className="flex items-center gap-3">
-              <svg width="40" height="40" viewBox="0 0 36 36" fill="none" aria-hidden="true">
-                <rect x="1" y="1" width="34" height="34" rx="6" fill="#fffdf7" stroke="#2b2d42" strokeWidth="2"/>
-                <circle cx="15" cy="18" r="9" stroke="#2b2d42" strokeWidth="2" fill="none"/>
-                <ellipse cx="15" cy="18" rx="4" ry="9" stroke="#2b2d42" strokeWidth="1.5" fill="none"/>
-                <line x1="6" y1="18" x2="24" y2="18" stroke="#2b2d42" strokeWidth="1.5"/>
-                <path d="M7 13 Q15 11 23 13" stroke="#2b2d42" strokeWidth="1.3" fill="none"/>
-                <path d="M7 23 Q15 25 23 23" stroke="#2b2d42" strokeWidth="1.3" fill="none"/>
-                <polyline points="27,13 32,18 27,23" stroke="#fb8500" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+              <img src="/logo.svg" width={40} height={40} alt="AutoL10n" />
               <div>
                 <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-heading)' }}>
                   {APP_INFO.name}
@@ -86,8 +78,11 @@ export default function InfoModal({ onClose }: Props) {
         {/* Scrollable changelog */}
         <div className="px-6 pb-6 overflow-y-auto">
           <div className="space-y-5">
-            {CHANGELOG.map((entry) => (
-              <div key={entry.date}>
+            {CHANGELOG.map((entry, i) => (
+              // date is not guaranteed unique — multiple entries can ship the
+              // same day — so index is used instead, safe since this list is
+              // static (never reordered or filtered).
+              <div key={i}>
                 <div className="flex items-center gap-2 mb-2">
                   <span
                     className="retro-section-num"

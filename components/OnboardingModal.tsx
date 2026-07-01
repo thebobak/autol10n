@@ -2,16 +2,16 @@
 
 import { useState } from 'react'
 import { ONBOARDING_STEPS, PROVIDERS } from '@/lib/coaching'
+import ModelSelect from '@/components/ModelSelect'
 import type { LlmConfig } from '@/lib/types'
 
 interface Props {
   initialConfig: LlmConfig
   onSaveConfig: (config: LlmConfig) => void
   onComplete: () => void
-  onStartTour: () => void
 }
 
-export default function OnboardingModal({ initialConfig, onSaveConfig, onComplete, onStartTour }: Props) {
+export default function OnboardingModal({ initialConfig, onSaveConfig, onComplete }: Props) {
   const [stepIdx, setStepIdx] = useState(0)
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
   const [draft, setDraft] = useState<LlmConfig>({
@@ -36,11 +36,6 @@ export default function OnboardingModal({ initialConfig, onSaveConfig, onComplet
   }
 
   const handleComplete = () => onComplete()
-
-  const handleTour = () => {
-    onComplete()
-    onStartTour()
-  }
 
   return (
     <div
@@ -72,15 +67,7 @@ export default function OnboardingModal({ initialConfig, onSaveConfig, onComplet
           {/* Welcome: large logo */}
           {step.id === 'welcome' && (
             <div className="flex justify-center mb-6">
-              <svg width="72" height="72" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="1" y="1" width="34" height="34" rx="6" fill="#fffdf7" stroke="#2b2d42" strokeWidth="2"/>
-                <circle cx="15" cy="18" r="9" stroke="#2b2d42" strokeWidth="2" fill="none"/>
-                <ellipse cx="15" cy="18" rx="4" ry="9" stroke="#2b2d42" strokeWidth="1.5" fill="none"/>
-                <line x1="6" y1="18" x2="24" y2="18" stroke="#2b2d42" strokeWidth="1.5"/>
-                <path d="M7 13 Q15 11 23 13" stroke="#2b2d42" strokeWidth="1.3" fill="none"/>
-                <path d="M7 23 Q15 25 23 23" stroke="#2b2d42" strokeWidth="1.3" fill="none"/>
-                <polyline points="27,13 32,18 27,23" stroke="#fb8500" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+              <img src="/logo.svg" width={72} height={72} alt="AutoL10n" />
             </div>
           )}
 
@@ -186,12 +173,9 @@ export default function OnboardingModal({ initialConfig, onSaveConfig, onComplet
                 <label className="block text-xs font-bold uppercase tracking-widest mb-2" style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>
                   Model
                 </label>
-                <input
-                  type="text"
+                <ModelSelect
                   value={draft.model}
-                  onChange={(e) => setDraft((d) => ({ ...d, model: e.target.value }))}
-                  placeholder="gpt-4o"
-                  className="retro-input retro-input-mono"
+                  onChange={(model) => setDraft((d) => ({ ...d, model }))}
                 />
               </div>
               <div>
@@ -235,13 +219,13 @@ export default function OnboardingModal({ initialConfig, onSaveConfig, onComplet
 
           {/* Navigation row */}
           <div className="flex items-center justify-between mt-6">
-            <div>
+            <div className="flex items-center gap-2">
               {stepIdx > 0 && !step.showSuccess && (
                 <button onClick={() => setStepIdx((i) => i - 1)} className="retro-btn btn-ghost">
                   ← Back
                 </button>
               )}
-              {stepIdx === 0 && (
+              {(stepIdx === 0 || step.showForm) && (
                 <button
                   onClick={handleComplete}
                   className="retro-btn btn-ghost"
@@ -254,14 +238,9 @@ export default function OnboardingModal({ initialConfig, onSaveConfig, onComplet
 
             <div>
               {step.showSuccess ? (
-                <div className="flex gap-3">
-                  <button onClick={handleTour} className="retro-btn btn-ghost">
-                    Take a tour
-                  </button>
-                  <button onClick={handleComplete} className="retro-btn btn-secondary">
-                    Let's go →
-                  </button>
-                </div>
+                <button onClick={handleComplete} className="retro-btn btn-secondary">
+                  Let's go →
+                </button>
               ) : step.showForm ? (
                 <button
                   onClick={handleSaveAndContinue}

@@ -88,9 +88,8 @@ stateDiagram-v2
 | `lib/xliff.ts` | Pure XML utilities: parse, mutate, serialize. No React, no fetch — can be tested in isolation. |
 | `lib/types.ts` | Shared TypeScript interfaces (`LlmConfig`, `TranslationError`, `TranslationStatus`). |
 | `lib/appinfo.ts` | App description and changelog. Edit to add a release entry. |
-| `lib/coaching.ts` | Onboarding steps, provider list, tour steps. Edit to change user-facing guidance copy. |
+| `lib/coaching.ts` | Onboarding steps and provider list. Edit to change user-facing guidance copy. |
 | `components/OnboardingModal.tsx` | First-run wizard. Reads from `lib/coaching.ts`. |
-| `components/TourModal.tsx` | Optional UI walkthrough. Reads from `lib/coaching.ts`. |
 | `components/InfoModal.tsx` | About / changelog panel. Reads from `lib/appinfo.ts`. |
 | `app/globals.css` | Retro Design System: CSS custom properties (tokens), all `.retro-*` component classes. |
 | `app/layout.tsx` | Root HTML shell, font loading (`next/font`). |
@@ -104,7 +103,7 @@ stateDiagram-v2
 
 ```
 Modal visibility
-  showOnboarding, showTour, showInfo, showSettings, showApiKey
+  showOnboarding, showInfo, showSettings, showApiKey
 
 Configuration  (two copies: committed vs. draft)
   config        ← what the running app uses

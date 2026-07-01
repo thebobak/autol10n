@@ -20,13 +20,6 @@ export type Provider = {
   defaultModel: string   // pre-fills the Model field
 }
 
-export type TourStep = {
-  id: string
-  badge: string          // short label shown in the section-number badge
-  title: string
-  body: string
-}
-
 // ─── Onboarding wizard (shown once to new users) ──────────────────────────────
 
 export const ONBOARDING_STEPS: OnboardingStep[] = [
@@ -36,6 +29,22 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     body: [
       'AutoL10n translates XLIFF files exported from Articulate Rise using AI — no spreadsheets, no copy-paste, no manual formatting.',
       "To get started you'll need an API key from an LLM provider. It takes about 2 minutes.",
+    ],
+  },
+  {
+    id: 'batch',
+    title: 'Translate Many Files at Once',
+    body: [
+      "Need to localize a whole course library? Switch to the Batch tab to upload up to 25 XLIFF files and translate them into one target language, one after another.",
+      'Pause and resume anytime, and download every translated file bundled into a single .zip when the run finishes.',
+    ],
+  },
+  {
+    id: 'multi-language',
+    title: 'One File, Many Languages',
+    body: [
+      "Going the other direction? The Multi-Language tab takes a single XLIFF file and translates it into as many languages as you need in one run — check off common languages or add custom ones for edge-case locales.",
+      'Just like Batch, results download together as a single .zip.',
     ],
   },
   {
@@ -60,8 +69,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     id: 'complete',
     title: "You're all set!",
     body: [
-      'AutoL10n is ready. Upload an .xlf file, pick a target language, and hit Start Translation.',
-      'Want a quick walkthrough of the interface? Take the 60-second tour.',
+      'AutoL10n is ready. Pick the Single File, Batch, or Multi-Language tab, upload your XLIFF, and hit Start Translation.',
     ],
     showSuccess: true,
   },
@@ -97,34 +105,5 @@ export const PROVIDERS: Provider[] = [
     docsUrl: null,
     apiUrl: 'https://llm.atko.ai/v1/chat/completions',
     defaultModel: 'gpt-4o',
-  },
-]
-
-// ─── Optional UI tour ─────────────────────────────────────────────────────────
-
-export const TOUR_STEPS: TourStep[] = [
-  {
-    id: 'upload',
-    badge: '01',
-    title: 'Upload Your XLIFF File',
-    body: "Export your course from Articulate Rise: File › Export › XLIFF. You'll get a .xlf file. Drop it into the upload zone, or click to browse.",
-  },
-  {
-    id: 'language',
-    badge: '02',
-    title: 'Pick a Target Language',
-    body: '18 common languages are pre-loaded. Choose "Other" to type any custom locale (e.g. ms-MY, fil-PH).',
-  },
-  {
-    id: 'translate',
-    badge: '03',
-    title: 'Run the Translation',
-    body: 'Hit Start Translation. Each XLIFF segment is sent to the AI individually. XML formatting tags inside your content are preserved exactly — so the re-import into Rise works without manual cleanup.',
-  },
-  {
-    id: 'download',
-    badge: '04',
-    title: 'Download and Re-import',
-    body: 'Download the translated .xlf file. In Articulate Rise, go to File › Import Translation and select the file to apply your translations.',
   },
 ]

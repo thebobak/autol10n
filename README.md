@@ -71,14 +71,13 @@ app/
 
 components/
   OnboardingModal.tsx   # First-run wizard
-  TourModal.tsx         # Optional UI walkthrough
   InfoModal.tsx         # About / changelog panel
 
 lib/
   xliff.ts              # XLIFF parser and serializer
   types.ts              # Shared TypeScript types
   appinfo.ts            # App description and changelog — edit to update
-  coaching.ts           # Onboarding and tour copy — edit to update
+  coaching.ts           # Onboarding copy — edit to update
 ```
 
 ---
@@ -105,13 +104,12 @@ The About panel (accessible from the navbar) reads this array directly.
 
 ---
 
-## Updating Onboarding and Tour Content
+## Updating Onboarding Content
 
 All coaching copy lives in `lib/coaching.ts`:
 
-- **`ONBOARDING_STEPS`** — the four-step wizard shown to new users
+- **`ONBOARDING_STEPS`** — the wizard shown to new users
 - **`PROVIDERS`** — the provider cards in the onboarding (name, description, API URL, default model)
-- **`TOUR_STEPS`** — the optional UI walkthrough
 
 Edit the string values freely. The step structure (which steps show a form, which show a provider grid, etc.) is controlled by boolean flags on each step object — see the type definitions at the top of the file.
 

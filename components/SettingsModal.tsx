@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { useLlmConfigContext, MODEL_GROUPS, KNOWN_MODELS } from '@/lib/llmConfigContext'
+import { useLlmConfigContext } from '@/lib/llmConfigContext'
 import { DEFAULT_SYSTEM_PROMPT } from '@/lib/prompt'
+import { clearAllLocalData } from '@/lib/clearData'
+import ModelSelect from '@/components/ModelSelect'
 import type { LlmConfig } from '@/lib/types'
 
 interface Props {
@@ -19,6 +21,15 @@ export default function SettingsModal({ onClose }: Props) {
   const handleSave = () => {
     saveConfig(configDraft)
     onClose()
+  }
+
+  const handleClearData = () => {
+    const confirmed = window.confirm(
+      'This will erase your saved API key, model, and any in-progress or completed translation sessions from this browser. This cannot be undone. Continue?'
+    )
+    if (!confirmed) return
+    clearAllLocalData()
+    window.location.reload()
   }
 
   const checkAccess = async () => {
@@ -97,35 +108,10 @@ export default function SettingsModal({ onClose }: Props) {
             <p className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
               The model used for every translation segment. Larger models are higher quality but slower and more expensive. GPT-4o is a good default for course content.
             </p>
-            <select
-              value={KNOWN_MODELS.includes(configDraft.model) ? configDraft.model : '__custom__'}
-              onChange={(e) => {
-                if (e.target.value !== '__custom__') {
-                  setConfigDraft((c) => ({ ...c, model: e.target.value }))
-                } else {
-                  setConfigDraft((c) => ({ ...c, model: '' }))
-                }
-              }}
-              className="retro-select retro-input-mono"
-            >
-              {MODEL_GROUPS.map(({ group, models }) => (
-                <optgroup key={group} label={group}>
-                  {models.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </optgroup>
-              ))}
-              <option value="__custom__">Other (specify below)</option>
-            </select>
-            {!KNOWN_MODELS.includes(configDraft.model) && (
-              <input
-                type="text"
-                value={configDraft.model}
-                onChange={(e) => setConfigDraft((c) => ({ ...c, model: e.target.value }))}
-                placeholder="e.g. my-custom-model"
-                className="retro-input retro-input-mono mt-2"
-              />
-            )}
+            <ModelSelect
+              value={configDraft.model}
+              onChange={(model) => setConfigDraft((c) => ({ ...c, model }))}
+            />
           </div>
 
           {/* API Key */}
@@ -269,7 +255,7 @@ export default function SettingsModal({ onClose }: Props) {
                 <code style={{ background: 'var(--canvas)', border: '1px solid var(--ink)', padding: '0.05rem 0.35rem', fontFamily: 'var(--font-mono)', color: 'var(--ink)', borderRadius: '2px' }}>
                   {'{targetLanguage}'}
                 </code>
-                {' '}to insert the selected language (e.g. <em>Spanish (es-ES)</em>).
+                {' '}as a placeholder for the selected language in the tool (e.g. <em>Spanish (es-ES)</em>).
               </p>
             )}
 
@@ -304,6 +290,19 @@ export default function SettingsModal({ onClose }: Props) {
                 style={{ fontSize: '0.8rem', resize: 'vertical', lineHeight: 1.6 }}
               />
             )}
+          </div>
+
+          {/* Danger Zone */}
+          <div style={{ borderTop: '2px solid var(--accent-dark)', paddingTop: '1.25rem' }}>
+            <label className="block text-xs font-bold uppercase tracking-widest mb-1" style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-dark)' }}>
+              Danger Zone
+            </label>
+            <p className="text-xs mb-3" style={{ color: 'var(--muted)' }}>
+              Erases your saved API key, model, and any in-progress or completed translation sessions from this browser. This cannot be undone.
+            </p>
+            <button onClick={handleClearData} className="retro-btn w-full" style={{ borderColor: 'var(--accent-dark)', color: 'var(--accent-dark)' }}>
+              Clear All Local Data
+            </button>
           </div>
 
           <div className="flex gap-3 pt-1">

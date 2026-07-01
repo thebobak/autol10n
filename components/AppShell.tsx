@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation'
 import { LlmConfigProvider, useLlmConfigContext, ONBOARDING_KEY } from '@/lib/llmConfigContext'
 import SettingsModal from '@/components/SettingsModal'
 import OnboardingModal from '@/components/OnboardingModal'
-import TourModal from '@/components/TourModal'
 import InfoModal from '@/components/InfoModal'
 import type { LlmConfig } from '@/lib/types'
 
@@ -34,7 +33,6 @@ function TabStrip() {
 
 function Chrome({ children }: { children: React.ReactNode }) {
   const { config, needsOnboarding, saveConfig, showSettings, openSettings, closeSettings } = useLlmConfigContext()
-  const [showTour, setShowTour] = useState(false)
   const [showInfo, setShowInfo] = useState(false)
   const [onboardingDismissed, setOnboardingDismissed] = useState(false)
 
@@ -47,12 +45,6 @@ function Chrome({ children }: { children: React.ReactNode }) {
     setOnboardingDismissed(true)
   }
 
-  const handleStartTour = () => {
-    try { localStorage.setItem(ONBOARDING_KEY, '1') } catch {}
-    setOnboardingDismissed(true)
-    setShowTour(true)
-  }
-
   const shouldShowOnboarding = needsOnboarding && !onboardingDismissed
 
   return (
@@ -61,15 +53,7 @@ function Chrome({ children }: { children: React.ReactNode }) {
       {/* ── Navbar ─────────────────────────────────────────── */}
       <header className="retro-navbar">
         <div className="flex items-center gap-3">
-          <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <rect x="1" y="1" width="34" height="34" rx="6" fill="#fffdf7" stroke="#2b2d42" strokeWidth="2"/>
-            <circle cx="15" cy="18" r="9" stroke="#2b2d42" strokeWidth="2" fill="none"/>
-            <ellipse cx="15" cy="18" rx="4" ry="9" stroke="#2b2d42" strokeWidth="1.5" fill="none"/>
-            <line x1="6" y1="18" x2="24" y2="18" stroke="#2b2d42" strokeWidth="1.5"/>
-            <path d="M7 13 Q15 11 23 13" stroke="#2b2d42" strokeWidth="1.3" fill="none"/>
-            <path d="M7 23 Q15 25 23 23" stroke="#2b2d42" strokeWidth="1.3" fill="none"/>
-            <polyline points="27,13 32,18 27,23" stroke="#fb8500" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
+          <img src="/logo.svg" width={36} height={36} alt="AutoL10n" />
           <div>
             <h1 className="text-lg tracking-widest uppercase" style={{ fontFamily: 'var(--font-heading)', color: 'var(--paper)', letterSpacing: '0.18em' }}>
               AutoL10n
@@ -81,17 +65,6 @@ function Chrome({ children }: { children: React.ReactNode }) {
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowTour(true)}
-              className="retro-btn btn-ghost-dark"
-              style={{ fontSize: '0.78rem', padding: '0.5rem 0.75rem' }}
-              title="Take a tour"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6-10l6-3m0 16l5.447-2.724A1 1 0 0021 16.382V5.618a1 1 0 00-1.447-.894L15 7m0 10V7" />
-              </svg>
-              <span className="hidden sm:inline">Tour</span>
-            </button>
             <button
               onClick={() => setShowInfo(true)}
               className="retro-btn btn-ghost-dark"
@@ -125,15 +98,7 @@ function Chrome({ children }: { children: React.ReactNode }) {
       <footer style={{ borderTop: '2px dashed var(--ink)', marginTop: '2rem' }}>
         <div className="max-w-2xl mx-auto px-4 py-6 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <svg width="28" height="28" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <rect x="1" y="1" width="34" height="34" rx="6" fill="#fffdf7" stroke="#2b2d42" strokeWidth="2"/>
-              <circle cx="15" cy="18" r="9" stroke="#2b2d42" strokeWidth="2" fill="none"/>
-              <ellipse cx="15" cy="18" rx="4" ry="9" stroke="#2b2d42" strokeWidth="1.5" fill="none"/>
-              <line x1="6" y1="18" x2="24" y2="18" stroke="#2b2d42" strokeWidth="1.5"/>
-              <path d="M7 13 Q15 11 23 13" stroke="#2b2d42" strokeWidth="1.3" fill="none"/>
-              <path d="M7 23 Q15 25 23 23" stroke="#2b2d42" strokeWidth="1.3" fill="none"/>
-              <polyline points="27,13 32,18 27,23" stroke="#fb8500" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+            <img src="/logo.svg" width={28} height={28} alt="AutoL10n" />
             <div>
               <p className="text-sm font-bold" style={{ fontFamily: 'var(--font-heading)', color: 'var(--ink)' }}>AutoL10n</p>
               <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--muted)', letterSpacing: '0.04em' }}>
@@ -159,11 +124,9 @@ function Chrome({ children }: { children: React.ReactNode }) {
           initialConfig={config}
           onSaveConfig={handleOnboardingConfig}
           onComplete={handleOnboardingComplete}
-          onStartTour={handleStartTour}
         />
       )}
 
-      {showTour && <TourModal onClose={() => setShowTour(false)} />}
       {showInfo && <InfoModal onClose={() => setShowInfo(false)} />}
     </div>
   )
