@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file original="broken.json" source-language="en-US" datatype="plaintext">
+    <body>
+      <trans-unit id="title">
+        <source>Unclosed tag
+      </trans-unit>
+    </body>
+  </file>
+</xliff>

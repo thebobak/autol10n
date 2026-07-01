@@ -168,8 +168,11 @@ export default function BatchPage() {
     }
 
     let remaining = incoming.length
-    const newBatchFiles: BatchFile[] = []
-    incoming.forEach((file) => {
+    // Each FileReader resolves independently and asynchronously — writing by
+    // index (rather than pushing) preserves the order files were selected in,
+    // regardless of which read happens to finish first.
+    const newBatchFiles: BatchFile[] = new Array(incoming.length)
+    incoming.forEach((file, index) => {
       const reader = new FileReader()
       reader.onload = (e) => {
         const content = e.target?.result as string
@@ -178,7 +181,7 @@ export default function BatchPage() {
           const doc = new DOMParser().parseFromString(content, 'application/xml')
           lang = doc.querySelector('file')?.getAttribute('source-language') ?? null
         } catch {}
-        newBatchFiles.push(createBatchFile(file.name, content, lang))
+        newBatchFiles[index] = createBatchFile(file.name, content, lang)
         remaining--
         if (remaining === 0) {
           dispatch({ type: 'ADD_FILES', files: newBatchFiles })
@@ -636,12 +639,15 @@ export default function BatchPage() {
       {/* ── Fatal parse-error confirm dialog ─────────────── */}
       {parseFailureDialog && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="parse-failure-dialog-title"
           className="fixed inset-0 z-[55] flex items-center justify-center p-4"
           style={{ background: 'rgba(43,45,66,0.7)' }}
         >
           <div className="retro-card w-full max-w-md">
             <div className="p-6 space-y-4">
-              <h2 className="text-base font-bold" style={{ fontFamily: 'var(--font-heading)' }}>
+              <h2 id="parse-failure-dialog-title" className="text-base font-bold" style={{ fontFamily: 'var(--font-heading)' }}>
                 Couldn't parse this file
               </h2>
               <p className="text-sm" style={{ color: 'var(--darker)' }}>
