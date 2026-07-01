@@ -39,6 +39,9 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Cancel button shows "Cancelling…" while in-flight request completes',
       'Segment counter and estimated time remaining displayed below progress bar',
       'Build version now includes hour (e.g. 2026.06.30.09) to distinguish same-day deploys',
+      'Updated the model list to match models actually available on this team; default changed to gemini-3.1-pro-preview',
+      'Added "Check Access" button in Settings to test API connectivity and surface which models are available',
+      'Added session persistence — translation progress is saved to localStorage and automatically restored on page reload',
     ],
   },
   {
