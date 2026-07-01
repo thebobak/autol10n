@@ -2,6 +2,7 @@
   "/_global-error/page": "/_global-error",
   "/_not-found/page": "/_not-found",
   "/api/translate/route": "/api/translate",
+  "/batch/page": "/batch",
   "/icon.svg/route": "/icon.svg",
   "/page": "/"
 }

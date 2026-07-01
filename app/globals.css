@@ -217,7 +217,7 @@ h1, h2, h3, h4, h5, h6 {
 /* ── Navbar ──────────────────────────────────────────────── */
 .retro-navbar {
   background: var(--primary);
-  box-shadow: 0 2px 0 0 var(--ink);
+  border-bottom: 2px solid var(--ink);
   padding: 0 2rem;
   height: 76px;
   display: flex;
@@ -225,6 +225,41 @@ h1, h2, h3, h4, h5, h6 {
   justify-content: space-between;
   color: var(--paper);
   overflow: hidden;
+}
+
+/* ── Mode tab strip (below navbar) ──────────────────────────── */
+/* Borderless tabs: the strip itself is a visibly different shade
+   (--disabled) from the page canvas below it. The active tab's background
+   matches the page canvas, so it visually "opens into" the page; inactive
+   tabs stay transparent, showing the strip's own shade through. No borders
+   or shadows needed — the color contrast alone signals selection. */
+.retro-tabstrip {
+  background: var(--disabled);
+  padding: 0.6rem 2rem 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.4rem;
+  overflow-x: auto;
+}
+
+.retro-tab {
+  padding: 0.65rem 1.15rem;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: var(--darker);
+  white-space: nowrap;
+  background: transparent;
+  transition: color 100ms var(--ease-mech), background-color 100ms var(--ease-mech);
+}
+
+.retro-tab:hover {
+  color: var(--ink);
+}
+
+.retro-tab.active {
+  color: var(--ink);
+  background: var(--canvas);
 }
 
 /* ── Progress ────────────────────────────────────────────── */

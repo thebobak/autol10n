@@ -2,6 +2,7 @@
   "/_global-error/page": "app/_global-error/page.js",
   "/_not-found/page": "app/_not-found/page.js",
   "/api/translate/route": "app/api/translate/route.js",
+  "/batch/page": "app/batch/page.js",
   "/icon.svg/route": "app/icon.svg/route.js",
   "/page": "app/page.js"
 }

@@ -48,6 +48,12 @@
       "namedRegex": "^/api/translate(?:/)?$"
     },
     {
+      "page": "/batch",
+      "regex": "^/batch(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/batch(?:/)?$"
+    },
+    {
       "page": "/icon.svg",
       "regex": "^/icon\\.svg(?:/)?$",
       "routeKeys": {},

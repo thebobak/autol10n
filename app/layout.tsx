@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Space_Grotesk, Manrope, Space_Mono } from 'next/font/google'
+import AppShell from '@/components/AppShell'
 import './globals.css'
 
 const spaceGrotesk = Space_Grotesk({
@@ -34,7 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
     >
       <body className="min-h-full antialiased" suppressHydrationWarning>
-        {children}
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   )
