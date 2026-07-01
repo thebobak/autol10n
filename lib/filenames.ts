@@ -12,3 +12,15 @@ export function withSuffix(fileName: string, suffix: string, fallback: string): 
   if (!match) return fallback
   return fileName.slice(0, -match[0].length) + suffix + match[0]
 }
+
+/**
+ * Extract a short, filename-safe code from a language label for use in zip
+ * entry names — e.g. "Spanish (es-ES)" -> "es-ES". Labels without a
+ * parenthesized code (typically free-text "Other" entries) fall back to a
+ * sanitized version of the whole label.
+ */
+export function extractLangCode(label: string): string {
+  const match = label.match(/\(([^)]+)\)\s*$/)
+  const raw = match ? match[1] : label
+  return raw.trim().replace(/[^a-zA-Z0-9-]+/g, '_').replace(/^_+|_+$/g, '') || 'other'
+}

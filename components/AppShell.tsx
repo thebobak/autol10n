@@ -13,6 +13,7 @@ import type { LlmConfig } from '@/lib/types'
 const TABS = [
   { href: '/', label: 'Single File' },
   { href: '/batch', label: 'Batch' },
+  { href: '/multi-language', label: 'Multi-Language' },
 ]
 
 function TabStrip() {

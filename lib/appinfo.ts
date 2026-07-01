@@ -25,6 +25,20 @@ export type ChangelogEntry = {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026.06.30',
+    label: 'v2.0',
+    changes: [
+      'Added a shared navbar and tab strip for switching between Single File, Batch, and Multi-Language modes',
+      'Added Batch mode — upload up to 25 XLIFF files and translate them sequentially into one target language',
+      'Batch mode supports pause/resume, session persistence across a page refresh, and a skip-or-cancel prompt if a file fails to parse',
+      'Batch mode downloads all translated files bundled into a single .zip',
+      'Added Multi-Language mode — upload one XLIFF file and translate it into any number of languages in one run',
+      'Multi-Language mode supports checkbox selection from the standard language list plus unlimited custom "Other" entries',
+      'Multi-Language mode supports pause/resume, session persistence, and downloads all translated languages bundled into a single .zip',
+      'LLM configuration (API URL, model, key, system prompt) is now shared across all three modes',
+    ],
+  },
+  {
+    date: '2026.06.30',
     label: 'v1.0',
     changes: [
       'Translation review drawer — side-by-side source and translation with plain-text editing',

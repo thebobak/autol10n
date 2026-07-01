@@ -58,6 +58,12 @@
       "regex": "^/icon\\.svg(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/icon\\.svg(?:/)?$"
+    },
+    {
+      "page": "/multi-language",
+      "regex": "^/multi\\-language(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/multi\\-language(?:/)?$"
     }
   ],
   "dataRoutes": [],

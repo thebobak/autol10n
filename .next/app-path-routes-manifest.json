@@ -4,5 +4,6 @@
   "/api/translate/route": "/api/translate",
   "/batch/page": "/batch",
   "/icon.svg/route": "/icon.svg",
+  "/multi-language/page": "/multi-language",
   "/page": "/"
 }

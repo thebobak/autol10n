@@ -4,5 +4,6 @@
   "/api/translate/route": "app/api/translate/route.js",
   "/batch/page": "app/batch/page.js",
   "/icon.svg/route": "app/icon.svg/route.js",
+  "/multi-language/page": "app/multi-language/page.js",
   "/page": "app/page.js"
 }

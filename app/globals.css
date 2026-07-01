@@ -162,6 +162,38 @@ h1, h2, h3, h4, h5, h6 {
 .retro-select:focus { box-shadow: var(--shadow-md); }
 .retro-select:disabled { background-color: var(--disabled); color: var(--muted); cursor: not-allowed; }
 
+/* ── Checkbox ────────────────────────────────────────────── */
+.retro-checkbox {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  appearance: none;
+  border: 2px solid var(--ink);
+  background: var(--paper);
+  cursor: pointer;
+  position: relative;
+  transition: background-color 100ms var(--ease-mech), border-color 100ms var(--ease-mech);
+}
+
+.retro-checkbox:checked {
+  background: var(--primary);
+  border-color: var(--ink);
+}
+
+.retro-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 0px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--paper);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.retro-checkbox:disabled { background: var(--disabled); border-color: var(--disabled); cursor: not-allowed; }
+
 /* ── Badges ──────────────────────────────────────────────── */
 .retro-badge {
   display: inline-block;
