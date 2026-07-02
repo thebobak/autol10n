@@ -4,6 +4,7 @@ import { seedConfig, mockTranslateApi } from './helpers'
 
 const SAMPLE = path.join(__dirname, 'fixtures', 'sample.xlf')
 const BROKEN = path.join(__dirname, 'fixtures', 'broken.xlf')
+const DUPLICATES = path.join(__dirname, 'fixtures', 'duplicates.xlf')
 
 test.describe('single-file translate', () => {
   test.beforeEach(async ({ page }) => {
@@ -70,6 +71,30 @@ test.describe('single-file translate', () => {
     await page.reload()
     await expect(page.getByText('Session restored')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Translation complete!' })).toBeVisible()
+  })
+
+  test('identical repeated segments are translated once and reused', async ({ page }) => {
+    let callCount = 0
+    await page.unroute('**/api/translate')
+    await page.route('**/api/translate', async (route) => {
+      callCount++
+      const body = route.request().postDataJSON() as { sourceXml: string; targetLanguage: string }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ translation: `[${body.targetLanguage}] ${body.sourceXml}` }),
+      })
+    })
+
+    // duplicates.xlf has 5 units but only 3 unique source strings — "Continue"
+    // repeats three times — so a correct dedup cache should call the API 3 times.
+    await page.locator('input[type="file"]').setInputFiles(DUPLICATES)
+    await page.getByRole('combobox').selectOption({ label: 'Spanish (es-ES)' })
+    await page.getByRole('button', { name: 'Start Translation' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Translation complete!' })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText('5 units translated')).toBeVisible()
+    expect(callCount).toBe(3)
   })
 
   test('a malformed XLIFF file surfaces a parse error and blocks translation', async ({ page }) => {

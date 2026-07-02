@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file original="course.json" source-language="en-US" datatype="plaintext">
+    <body>
+      <trans-unit id="title">
+        <source>Welcome to the course</source>
+      </trans-unit>
+      <trans-unit id="nav-1">
+        <source>Continue</source>
+      </trans-unit>
+      <trans-unit id="body-1">
+        <source>This lesson covers the basics.</source>
+      </trans-unit>
+      <trans-unit id="nav-2">
+        <source>Continue</source>
+      </trans-unit>
+      <trans-unit id="nav-3">
+        <source>Continue</source>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>

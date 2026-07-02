@@ -100,6 +100,17 @@ export function setTranslation(unit: TransUnit, translatedXml: string): void {
 }
 
 /**
+ * Read the current translated XML from a unit's <target>, or null if it
+ * has none. Used to seed a translation cache from already-translated units
+ * (e.g. when resuming a paused run) without re-deriving it from a session.
+ */
+export function getTranslatedXml(unit: TransUnit): string | null {
+  const targetEl = unit.element.querySelector('target')
+  if (!targetEl) return null
+  return getInnerXml(targetEl)
+}
+
+/**
  * Serialize the mutated DOM back to an XML string.
  *
  * XMLSerializer's output may or may not include an XML declaration

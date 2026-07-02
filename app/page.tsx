@@ -2,9 +2,10 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { parseXliff, setTranslation, serializeXliff, type TransUnit } from '@/lib/xliff'
-import { translateUnit } from '@/lib/translate'
 import { LANGUAGE_OPTIONS } from '@/lib/languages'
 import { withSuffix } from '@/lib/filenames'
+import { translateUnitCached, buildTranslationCache, type TranslationCache } from '@/lib/dedupe'
+import { readGlossary, matchingTerms } from '@/lib/glossary'
 import type { TranslationError, TranslationStatus } from '@/lib/types'
 import { useLlmConfigContext } from '@/lib/llmConfigContext'
 import ReviewDrawer, { type DrawerState } from '@/components/ReviewDrawer'
@@ -84,6 +85,15 @@ export default function Home() {
   // completes — before any manual edits. Used for "Download Original" option.
   const originalXmlRef = useRef<string | null>(null)
   const drawerStateRef = useRef<DrawerState | null>(null)
+  // Exact-source-match cache — repeated identical segments (common in
+  // Articulate Rise courses: nav labels, button text) reuse a prior
+  // translation instead of re-calling the LLM.
+  const cacheRef = useRef<TranslationCache>(new Map())
+  // Tracks segments where a glossary term matched the source but its preferred
+  // translation wasn't found in the LLM's output — shown as a mismatch
+  // indicator in the Review drawer. Keyed by element (not unit.id) because
+  // trans-unit ids aren't guaranteed unique across <file> sections.
+  const glossaryMismatchIdsRef = useRef<Set<Element>>(new Set())
 
   // Restore any saved session after mount.
   useEffect(() => {
@@ -110,6 +120,26 @@ export default function Home() {
           const blob = new Blob([s.translatedXml], { type: 'application/xml' })
           setOutputBlob(URL.createObjectURL(blob))
         }
+        // Recompute glossary mismatches from the restored state — the
+        // glossary may have been updated since the last run, but this gives
+        // a reasonable approximation without requiring re-translation.
+        const restoredGlossary = readGlossary()
+        const lang = s.targetLanguage
+        const mismatches = new Set<Element>()
+        for (const unit of units) {
+          const terms = matchingTerms(restoredGlossary, lang, unit.sourceXml)
+          if (terms.length === 0) continue
+          const targetEl = unit.element.querySelector('target')
+          if (!targetEl) continue
+          const translated = targetEl.textContent ?? ''
+          for (const t of terms) {
+            if (t.translation && !translated.includes(t.translation)) {
+              mismatches.add(unit.element)
+              break
+            }
+          }
+        }
+        glossaryMismatchIdsRef.current = mismatches
         setSessionRestored(true)
       }
     } catch {}
@@ -167,6 +197,8 @@ export default function Home() {
     setCancelling(false)
     if (!isResume) { setHasReviewEdits(false); drawerStateRef.current = null; clearSession() }
 
+    const glossary = readGlossary()
+
     let doc: Document
     let units: TransUnit[]
     let startFrom: number
@@ -176,6 +208,7 @@ export default function Home() {
       doc = docRef.current
       units = allUnitsRef.current
       startFrom = doneCountRef.current
+      cacheRef.current = buildTranslationCache(units, startFrom)
     } else {
       let parsed
       try {
@@ -194,6 +227,8 @@ export default function Home() {
       allUnitsRef.current = units
       startFrom = 0
       doneCountRef.current = 0
+      cacheRef.current = new Map()
+      glossaryMismatchIdsRef.current = new Set()
     }
 
     setStatus('translating')
@@ -232,8 +267,17 @@ export default function Home() {
 
       const segStart = Date.now()
       try {
-        const translated = await translateUnit(unit, effectiveLanguage, config)
+        const terms = matchingTerms(glossary, effectiveLanguage, unit.sourceXml)
+        const translated = await translateUnitCached(cacheRef.current, unit, effectiveLanguage, config, terms)
         setTranslation(unit, translated)
+        // Soft mismatch check: if any glossary term was expected for this
+        // segment but doesn't appear in the translation, flag the element.
+        for (const t of terms) {
+          if (t.translation && !translated.includes(t.translation)) {
+            glossaryMismatchIdsRef.current.add(unit.element)
+            break
+          }
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         errorList.push({ unitId: unit.id, message })
@@ -321,6 +365,8 @@ export default function Home() {
     doneCountRef.current = 0
     originalXmlRef.current = null
     drawerStateRef.current = null
+    cacheRef.current = new Map()
+    glossaryMismatchIdsRef.current = new Set()
     setShowReview(false)
     setHasReviewEdits(false)
     setSessionRestored(false)
@@ -747,6 +793,7 @@ export default function Home() {
         <ReviewDrawer
           units={allUnitsRef.current}
           errorUnitIds={new Set(errors?.map((e) => e.unitId) ?? [])}
+          glossaryMismatchEls={glossaryMismatchIdsRef.current}
           savedState={drawerStateRef.current}
           onClose={() => setShowReview(false)}
           onEditsChange={(count) => setHasReviewEdits(count > 0)}

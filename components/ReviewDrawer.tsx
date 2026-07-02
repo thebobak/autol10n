@@ -131,11 +131,14 @@ function applyTextEdit(unit: TransUnit, newText: string): void {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Filter = 'all' | 'errors' | 'edited'
+type Filter = 'all' | 'errors' | 'edited' | 'mismatches'
 
 interface Props {
   units: TransUnit[]
   errorUnitIds: Set<string>
+  // Segments where a glossary term matched the source but wasn't found in
+  // the translation — flagged softly, not treated as a hard error.
+  glossaryMismatchEls: Set<Element>
   savedState: DrawerState | null
   onClose: () => void
   onEditsChange: (count: number) => void
@@ -144,7 +147,7 @@ interface Props {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ReviewDrawer({ units, errorUnitIds, savedState, onClose, onEditsChange, onSaveState }: Props) {
+export default function ReviewDrawer({ units, errorUnitIds, glossaryMismatchEls, savedState, onClose, onEditsChange, onSaveState }: Props) {
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
   const [editingEl, setEditingEl] = useState<Element | null>(null)
@@ -206,6 +209,7 @@ export default function ReviewDrawer({ units, errorUnitIds, savedState, onClose,
     let list = units
     if (filter === 'errors') list = list.filter((u) => errorUnitIds.has(u.id))
     if (filter === 'edited') list = list.filter((u) => editedEls.has(u.element))
+    if (filter === 'mismatches') list = list.filter((u) => glossaryMismatchEls.has(u.element))
     if (search.trim()) {
       const q = search.toLowerCase()
       list = list.filter((u) => {
@@ -215,11 +219,12 @@ export default function ReviewDrawer({ units, errorUnitIds, savedState, onClose,
       })
     }
     return list
-  }, [units, filter, search, editedEls, errorUnitIds])
+  }, [units, filter, search, editedEls, errorUnitIds, glossaryMismatchEls])
 
   const filterLabel = (f: Filter) => {
     if (f === 'errors') return errorUnitIds.size > 0 ? `Errors (${errorUnitIds.size})` : 'Errors'
     if (f === 'edited') return editedEls.size > 0 ? `Edited (${editedEls.size})` : 'Edited'
+    if (f === 'mismatches') return glossaryMismatchEls.size > 0 ? `Mismatches (${glossaryMismatchEls.size})` : 'Mismatches'
     return 'All'
   }
 
@@ -279,7 +284,7 @@ export default function ReviewDrawer({ units, errorUnitIds, savedState, onClose,
             className="retro-input flex-1"
             style={{ fontSize: '0.8rem', padding: '0.4rem 0.65rem' }}
           />
-          {(['all', 'errors', 'edited'] as Filter[]).map((f) => (
+          {(['all', 'errors', 'edited', 'mismatches'] as Filter[]).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
@@ -329,6 +334,7 @@ export default function ReviewDrawer({ units, errorUnitIds, savedState, onClose,
               const isEditing = editingEl === unit.element
               const isEdited = editedEls.has(unit.element)
               const hasError = errorUnitIds.has(unit.id)
+              const hasMismatch = glossaryMismatchEls.has(unit.element)
               const sourcePlain = stripTags(unit.sourceXml)
 
               return (
@@ -357,6 +363,12 @@ export default function ReviewDrawer({ units, errorUnitIds, savedState, onClose,
                       <span
                         title="Translation error"
                         style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--accent-dark)', flexShrink: 0, border: '1.5px solid var(--ink)' }}
+                      />
+                    )}
+                    {hasMismatch && (
+                      <span
+                        title="Glossary term not found in translation"
+                        style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--primary-light)', flexShrink: 0, border: '1.5px solid var(--ink)' }}
                       />
                     )}
                   </div>

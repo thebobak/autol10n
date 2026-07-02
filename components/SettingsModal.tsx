@@ -5,6 +5,7 @@ import { useLlmConfigContext } from '@/lib/llmConfigContext'
 import { DEFAULT_SYSTEM_PROMPT } from '@/lib/prompt'
 import { clearAllLocalData } from '@/lib/clearData'
 import ModelSelect from '@/components/ModelSelect'
+import GlossaryModal from '@/components/GlossaryModal'
 import type { LlmConfig } from '@/lib/types'
 
 interface Props {
@@ -15,6 +16,7 @@ export default function SettingsModal({ onClose }: Props) {
   const { config, saveConfig } = useLlmConfigContext()
   const [configDraft, setConfigDraft] = useState<LlmConfig>(config)
   const [showApiKey, setShowApiKey] = useState(false)
+  const [showGlossary, setShowGlossary] = useState(false)
   const [checkingAccess, setCheckingAccess] = useState(false)
   const [accessResult, setAccessResult] = useState<{ ok: boolean; message: string } | null>(null)
 
@@ -292,6 +294,22 @@ export default function SettingsModal({ onClose }: Props) {
             )}
           </div>
 
+          {/* Glossary */}
+          <div style={{ borderTop: '2px solid var(--ink)', paddingTop: '1.25rem' }}>
+            <label className="block text-xs font-bold uppercase tracking-widest mb-1" style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted)' }}>
+              Glossary
+            </label>
+            <p className="text-xs mb-3" style={{ color: 'var(--muted)' }}>
+              Pin preferred translations for specific terms so they stay consistent across every segment, file, and run.
+            </p>
+            <button onClick={() => setShowGlossary(true)} className="retro-btn btn-ghost w-full">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+              Manage Glossary
+            </button>
+          </div>
+
           {/* Danger Zone */}
           <div style={{ borderTop: '2px solid var(--accent-dark)', paddingTop: '1.25rem' }}>
             <label className="block text-xs font-bold uppercase tracking-widest mb-1" style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-dark)' }}>
@@ -315,6 +333,8 @@ export default function SettingsModal({ onClose }: Props) {
           </div>
         </div>
       </div>
+
+      {showGlossary && <GlossaryModal onClose={() => setShowGlossary(false)} />}
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import type { TransUnit } from '@/lib/xliff'
 import type { LlmConfig } from '@/lib/types'
+import type { GlossaryTerm } from '@/lib/glossary'
 
 /**
  * Translate a single trans-unit via the /api/translate proxy, retrying with
@@ -9,7 +10,8 @@ export async function translateUnit(
   unit: TransUnit,
   targetLanguage: string,
   config: LlmConfig,
-  retries = 3
+  retries = 3,
+  glossaryTerms: GlossaryTerm[] = []
 ): Promise<string> {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
@@ -24,6 +26,7 @@ export async function translateUnit(
           model: config.model,
           promptMode: config.promptMode,
           customPrompt: config.customPrompt,
+          glossaryTerms,
         }),
       })
 

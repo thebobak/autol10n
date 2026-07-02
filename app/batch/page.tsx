@@ -3,9 +3,10 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import { parseXliff, setTranslation, serializeXliff, type TransUnit } from '@/lib/xliff'
-import { translateUnit } from '@/lib/translate'
 import { LANGUAGE_OPTIONS } from '@/lib/languages'
 import { withSuffix } from '@/lib/filenames'
+import { translateUnitCached, buildTranslationCache, type TranslationCache } from '@/lib/dedupe'
+import { readGlossary, matchingTerms } from '@/lib/glossary'
 import { useLlmConfigContext } from '@/lib/llmConfigContext'
 import type { TranslationError } from '@/lib/types'
 import {
@@ -73,6 +74,9 @@ interface FileRuntime {
   doc: Document
   units: TransUnit[]
   doneCount: number
+  // Exact-source-match cache, scoped per file — repeated identical segments
+  // within the same file reuse a prior translation instead of re-calling the LLM.
+  cache: TranslationCache
 }
 
 type BatchControl = 'none' | 'pause' | 'cancel-batch'
@@ -116,7 +120,8 @@ export default function BatchPage() {
       if ((f.status === 'translating' || f.status === 'paused') && f.translatedXml) {
         try {
           const { doc, units } = parseXliff(f.translatedXml)
-          filesRuntimeRef.current.set(f.id, { doc, units, doneCount: f.progress })
+          const cache = buildTranslationCache(units, f.progress)
+          filesRuntimeRef.current.set(f.id, { doc, units, doneCount: f.progress, cache })
           restored.push({ ...f, status: 'paused' })
           continue
         } catch {
@@ -234,6 +239,8 @@ export default function BatchPage() {
     controlRef.current = 'none'
     setRunning(true)
 
+    const glossary = readGlossary()
+
     // Work from the latest file list each iteration via a mutable local copy
     // kept in sync with dispatched reducer actions, since the reducer's
     // output isn't available synchronously between dispatch calls.
@@ -282,7 +289,7 @@ export default function BatchPage() {
           continue
         }
 
-        runtime = { doc: parsed.doc, units: parsed.units, doneCount: file.progress }
+        runtime = { doc: parsed.doc, units: parsed.units, doneCount: file.progress, cache: new Map() }
         filesRuntimeRef.current.set(file.id, runtime)
       }
 
@@ -299,7 +306,8 @@ export default function BatchPage() {
 
         const unit = runtime.units[i]
         try {
-          const translated = await translateUnit(unit, effectiveLanguage, config)
+          const terms = matchingTerms(glossary, effectiveLanguage, unit.sourceXml)
+          const translated = await translateUnitCached(runtime.cache, unit, effectiveLanguage, config, terms)
           setTranslation(unit, translated)
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err)

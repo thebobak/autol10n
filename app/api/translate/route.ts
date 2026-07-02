@@ -8,7 +8,7 @@
  *   endpoints often don't. Running the call here on the server sidesteps CORS
  *   entirely and also keeps the API key out of browser network logs.
  *
- * Request shape:  { sourceXml, targetLanguage, apiUrl, apiKey, model, promptMode?, customPrompt? }
+ * Request shape:  { sourceXml, targetLanguage, apiUrl, apiKey, model, promptMode?, customPrompt?, glossaryTerms? }
  * Response shape: { translation: string }  |  { error: string }
  */
 import { NextRequest, NextResponse } from 'next/server'
@@ -48,7 +48,7 @@ function resolveEndpoint(raw?: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  const { sourceXml, targetLanguage, apiUrl, apiKey, model, promptMode, customPrompt } = await req.json()
+  const { sourceXml, targetLanguage, apiUrl, apiKey, model, promptMode, customPrompt, glossaryTerms } = await req.json()
 
   if (!apiKey) return NextResponse.json({ error: 'API key required' }, { status: 400 })
   if (!sourceXml) return NextResponse.json({ error: 'sourceXml required' }, { status: 400 })
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     messages: [
       {
         role: 'system',
-        content: buildSystemPrompt(targetLanguage, promptMode ?? 'standard', customPrompt ?? ''),
+        content: buildSystemPrompt(targetLanguage, promptMode ?? 'standard', customPrompt ?? '', glossaryTerms ?? []),
       },
       {
         role: 'user',

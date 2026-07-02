@@ -3,9 +3,10 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import { parseXliff, setTranslation, serializeXliff, type TransUnit } from '@/lib/xliff'
-import { translateUnit } from '@/lib/translate'
 import { LANGUAGE_OPTIONS } from '@/lib/languages'
 import { withSuffix, extractLangCode } from '@/lib/filenames'
+import { translateUnitCached, buildTranslationCache, type TranslationCache } from '@/lib/dedupe'
+import { readGlossary, matchingTerms } from '@/lib/glossary'
 import { useLlmConfigContext } from '@/lib/llmConfigContext'
 import type { TranslationError } from '@/lib/types'
 import {
@@ -58,6 +59,10 @@ interface JobRuntime {
   doc: Document
   units: TransUnit[]
   doneCount: number
+  // Exact-source-match cache, scoped per job — each language independently
+  // reuses a prior translation for repeated identical segments within the
+  // same run instead of re-calling the LLM.
+  cache: TranslationCache
 }
 
 export default function MultiLanguagePage() {
@@ -96,7 +101,8 @@ export default function MultiLanguagePage() {
       if ((j.status === 'translating' || j.status === 'paused') && j.translatedXml) {
         try {
           const { doc, units } = parseXliff(j.translatedXml)
-          jobsRuntimeRef.current.set(j.id, { doc, units, doneCount: j.progress })
+          const cache = buildTranslationCache(units, j.progress)
+          jobsRuntimeRef.current.set(j.id, { doc, units, doneCount: j.progress, cache })
           restored.push({ ...j, status: 'paused' })
           continue
         } catch {
@@ -216,6 +222,8 @@ export default function MultiLanguagePage() {
     pauseRef.current = false
     setRunning(true)
 
+    const glossary = readGlossary()
+
     let currentJobs = jobs
     if (currentJobs.length === 0) {
       currentJobs = selectedLanguages.map((lang) => createLanguageJob(lang))
@@ -230,7 +238,7 @@ export default function MultiLanguagePage() {
       if (!runtime) {
         // Guaranteed to succeed — the file was validated once on upload.
         const parsed = parseXliff(xliffContent)
-        runtime = { doc: parsed.doc, units: parsed.units, doneCount: job.progress }
+        runtime = { doc: parsed.doc, units: parsed.units, doneCount: job.progress, cache: new Map() }
         jobsRuntimeRef.current.set(job.id, runtime)
       }
 
@@ -245,7 +253,8 @@ export default function MultiLanguagePage() {
 
         const unit = runtime.units[i]
         try {
-          const translated = await translateUnit(unit, job.label, config)
+          const terms = matchingTerms(glossary, job.label, unit.sourceXml)
+          const translated = await translateUnitCached(runtime.cache, unit, job.label, config, terms)
           setTranslation(unit, translated)
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err)
